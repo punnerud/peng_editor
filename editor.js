@@ -680,6 +680,21 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // The selectionchange event is already handled earlier in this function
         // No duplicate listener needed here
+        
+        // Settings button and save settings
+        document.getElementById('settings-btn').addEventListener('click', showSettingsDialog);
+        document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+        
+        // Add event listener for the settings dialog close button
+        const settingsCloseBtn = document.getElementById('settings-dialog').querySelector('.close-dialog');
+        if (settingsCloseBtn) {
+            settingsCloseBtn.addEventListener('click', function() {
+                document.getElementById('settings-dialog').style.display = 'none';
+            });
+        }
+        
+        // Load settings from localStorage 
+        loadSettings();
     }
     
     // Execute command
@@ -1841,6 +1856,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get the filename from the input field
         const filenameInput = document.getElementById('filename-input');
         let filename = filenameInput.value.trim();
+        
+        // Check if auto-date setting is enabled
+        const settings = JSON.parse(localStorage.getItem('editorSettings')) || {};
+        if (settings.autoDate) {
+            // Add date to filename
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD format
+            
+            // Only add date if not already present
+            if (!filename.includes(dateStr)) {
+                filename = `${dateStr}_${filename}`;
+                filenameInput.value = filename; // Update input field
+            }
+        }
         
         // Add .html extension if not present (we're always saving HTML files)
         if (!filename.toLowerCase().endsWith('.html')) {
@@ -3936,5 +3965,242 @@ document.addEventListener('DOMContentLoaded', function() {
             
             showNotification('All content has been cleared', 'success');
         }
+    }
+
+    // Load settings from localStorage
+    function loadSettings() {
+        const settings = JSON.parse(localStorage.getItem('editorSettings')) || {
+            autoDate: false,
+            showWords: true,
+            showChars: true,
+            showLineNumbers: false
+        };
+        
+        // Apply settings to UI
+        document.getElementById('setting-auto-date').checked = settings.autoDate;
+        document.getElementById('setting-show-words').checked = settings.showWords;
+        document.getElementById('setting-show-chars').checked = settings.showChars;
+        document.getElementById('setting-show-line-numbers').checked = settings.showLineNumbers;
+        
+        // Apply settings to editor
+        applySettings(settings);
+    }
+
+    // Apply settings to the editor
+    function applySettings(settings) {
+        // Show/hide word count
+        const wordCountElement = document.querySelector('.word-count');
+        wordCountElement.style.display = settings.showWords ? 'block' : 'none';
+        
+        // Show/hide character count
+        const charCountElement = document.querySelector('.char-count');
+        charCountElement.style.display = settings.showChars ? 'flex' : 'none';
+        
+        // Show/hide line numbers
+        toggleLineNumbers(settings.showLineNumbers);
+    }
+
+    // Save settings to localStorage
+    function saveSettings() {
+        const settings = {
+            autoDate: document.getElementById('setting-auto-date').checked,
+            showWords: document.getElementById('setting-show-words').checked,
+            showChars: document.getElementById('setting-show-chars').checked,
+            showLineNumbers: document.getElementById('setting-show-line-numbers').checked
+        };
+        
+        // Save to localStorage
+        localStorage.setItem('editorSettings', JSON.stringify(settings));
+        
+        // Apply settings
+        applySettings(settings);
+        
+        // Close dialog
+        document.getElementById('settings-dialog').style.display = 'none';
+        
+        // Show confirmation
+        showNotification('Settings saved successfully', 'success');
+    }
+
+    // Show settings dialog
+    function showSettingsDialog() {
+        document.getElementById('settings-dialog').style.display = 'flex';
+    }
+
+    // Toggle line numbers display
+    function toggleLineNumbers(show) {
+        // Remove existing line numbers if any
+        const existingLineNumbers = document.querySelector('.line-numbers');
+        if (existingLineNumbers) {
+            existingLineNumbers.remove();
+        }
+        
+        // Toggle editor class
+        editor.classList.toggle('editor-with-line-numbers', show);
+        
+        if (show) {
+            // Create line numbers container
+            const lineNumbersContainer = document.createElement('div');
+            lineNumbersContainer.className = 'line-numbers';
+            editor.parentElement.appendChild(lineNumbersContainer);
+            
+            // Create hidden mirror textarea to help with line number positioning
+            const mirrorTextArea = document.createElement('div');
+            mirrorTextArea.className = 'mirror-textarea';
+            editor.parentElement.appendChild(mirrorTextArea);
+            
+            // Update line numbers
+            updateLineNumbers();
+            
+            // Add mutation observer to update line numbers when content changes
+            if (!window.lineNumbersObserver) {
+                window.lineNumbersObserver = new MutationObserver(updateLineNumbers);
+                window.lineNumbersObserver.observe(editor, { 
+                    childList: true, 
+                    subtree: true, 
+                    characterData: true 
+                });
+            }
+            
+            // Add scroll sync between editor and line numbers
+            editor.addEventListener('scroll', syncScroll);
+        } else {
+            // Disconnect observer if exists
+            if (window.lineNumbersObserver) {
+                window.lineNumbersObserver.disconnect();
+                window.lineNumbersObserver = null;
+            }
+            
+            // Remove mirror textarea if exists
+            const mirrorTextArea = document.querySelector('.mirror-textarea');
+            if (mirrorTextArea) {
+                mirrorTextArea.remove();
+            }
+            
+            // Remove scroll event listener
+            editor.removeEventListener('scroll', syncScroll);
+        }
+    }
+
+    // Sync scroll between editor and line numbers
+    function syncScroll() {
+        const lineNumbers = document.querySelector('.line-numbers');
+        if (lineNumbers) {
+            lineNumbers.scrollTop = editor.scrollTop;
+        }
+    }
+
+    // Update line numbers display
+    function updateLineNumbers() {
+        const lineNumbersContainer = document.querySelector('.line-numbers');
+        const mirrorTextArea = document.querySelector('.mirror-textarea');
+        if (!lineNumbersContainer || !mirrorTextArea) return;
+        
+        // Get content and compute lines
+        const content = editor.innerHTML;
+        
+        // Update mirror textarea with the same content but invisible
+        mirrorTextArea.innerHTML = content.replace(/<br>/g, '\n<br>');
+        
+        // Count actual displayed lines by getting spans from mirror
+        const textRects = getAllTextLineRects();
+        const lineCount = textRects.length;
+        
+        // Generate line numbers HTML
+        let lineNumbersHTML = '';
+        for (let i = 1; i <= lineCount; i++) {
+            lineNumbersHTML += `<div class="line-number">${i}</div>`;
+        }
+        
+        lineNumbersContainer.innerHTML = lineNumbersHTML;
+        
+        // Align line numbers with the text content
+        alignLineNumbers(textRects);
+    }
+
+    // Get all text line rectangles from the editor
+    function getAllTextLineRects() {
+        const textRects = [];
+        const range = document.createRange();
+        const textNodes = getAllTextNodesIn(editor);
+        
+        // Extract text nodes and compute their line positions
+        textNodes.forEach(node => {
+            const text = node.textContent;
+            if (!text.trim()) return;
+            
+            // Process each line in the text node
+            const lines = text.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                
+                try {
+                    // Set range to this line
+                    if (i === 0) {
+                        range.setStart(node, 0);
+                        range.setEnd(node, Math.min(lines[i].length, node.length));
+                    } else {
+                        // For other lines, we need to calculate position
+                        const prevLinesLength = lines.slice(0, i).join('\n').length + i; // +i for the \n chars
+                        range.setStart(node, prevLinesLength);
+                        range.setEnd(node, prevLinesLength + lines[i].length);
+                    }
+                    
+                    // Get rectangle for this range
+                    const rect = range.getBoundingClientRect();
+                    if (rect.height > 0) {
+                        textRects.push({ 
+                            top: rect.top,
+                            height: rect.height
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error computing text rectangle:', e);
+                }
+            }
+        });
+        
+        // Add rectangles for block elements that might not have text
+        const blockElements = editor.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, pre, blockquote');
+        blockElements.forEach(element => {
+            if (!element.textContent.trim()) { // Empty block element
+                const rect = element.getBoundingClientRect();
+                if (rect.height > 0) {
+                    textRects.push({
+                        top: rect.top,
+                        height: rect.height
+                    });
+                }
+            }
+        });
+        
+        // Sort by top position
+        textRects.sort((a, b) => a.top - b.top);
+        
+        // Deduplicate lines that are very close to each other (within 5px)
+        const deduplicatedRects = [];
+        for (let i = 0; i < textRects.length; i++) {
+            if (i === 0 || Math.abs(textRects[i].top - textRects[i-1].top) > 5) {
+                deduplicatedRects.push(textRects[i]);
+            }
+        }
+        
+        return deduplicatedRects;
+    }
+
+    // Align line number divs with the text content
+    function alignLineNumbers(textRects) {
+        const lineNumbers = document.querySelectorAll('.line-number');
+        const editorRect = editor.getBoundingClientRect();
+        
+        lineNumbers.forEach((lineNumber, index) => {
+            if (index < textRects.length) {
+                const rect = textRects[index];
+                const relativeTop = rect.top - editorRect.top;
+                lineNumber.style.top = `${relativeTop}px`;
+                lineNumber.style.height = `${rect.height}px`;
+                lineNumber.style.lineHeight = `${rect.height}px`;
+            }
+        });
     }
 }); 

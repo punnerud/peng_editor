@@ -745,4 +745,155 @@ body {
 
 .notification-action-btn:hover {
     background-color: #d32f2f;
+}
+
+/* Footer actions buttons */
+.footer-actions {
+    display: flex;
+    gap: 8px;
+    margin: 0 15px;
+}
+
+.footer-actions button {
+    background-color: transparent;
+    border: none;
+    color: #666;
+    font-size: 16px;
+    padding: 5px;
+    cursor: pointer;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.footer-actions button:hover {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+/* Settings dialog styles */
+.settings-section {
+    margin: 15px 0;
+}
+
+.setting-item {
+    margin-bottom: 12px;
+}
+
+.setting-item label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.setting-item input[type="checkbox"] {
+    margin-right: 10px;
+    width: 16px;
+    height: 16px;
+}
+
+#save-settings-btn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 15px;
+}
+
+#save-settings-btn:hover {
+    background-color: #45a049;
+}
+
+/* Line numbers in editor */
+.editor-with-line-numbers {
+    position: relative;
+    padding-left: 40px !important;
+}
+
+.line-numbers {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 30px;
+    height: 100%;
+    border-right: 1px solid #ddd;
+    background-color: #f8f8f8;
+    padding: 20px 5px 20px 0;
+    color: #999;
+    font-size: 12px;
+    font-family: monospace;
+    user-select: none;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.line-number {
+    position: absolute;
+    right: 5px;
+    text-align: right;
+    color: #999;
+    font-size: 12px;
+    font-family: monospace;
+    white-space: nowrap;
+    padding-right: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+}
+
+.mirror-textarea {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+/* Settings dialog links section */
+.links-section {
+    border-top: 1px solid #eee;
+    padding-top: 15px;
+    margin-top: 20px;
+}
+
+.links-section h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 16px;
+    color: #555;
+}
+
+.settings-links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.settings-links a {
+    display: flex;
+    align-items: center;
+    color: #1a73e8;
+    text-decoration: none;
+    font-size: 14px;
+    gap: 8px;
+    transition: color 0.2s;
+}
+
+.settings-links a:hover {
+    color: #0d47a1;
+    text-decoration: underline;
+}
+
+.settings-links a i {
+    font-size: 16px;
 } 

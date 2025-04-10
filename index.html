@@ -92,6 +92,9 @@
                 <button id="save-btn">Save</button>
                 <button id="load-btn">Load</button>
             </div>
+            <div class="footer-actions">
+                <button id="settings-btn" title="Settings"><i class="fas fa-cog"></i></button>
+            </div>
             <div class="word-count">Words: <span id="word-count">0</span></div>
             <div class="char-count">
                 <button id="quick-emoji-btn" class="quick-emoji-button" style="display: none;">👍</button>
@@ -205,6 +208,57 @@
                         <!-- Recent emojis will be shown here -->
                     </div>
                 </div>
+            </div>
+        </div>
+        
+        <div id="settings-dialog" class="dialog">
+            <div class="dialog-content">
+                <span class="close-dialog">&times;</span>
+                <h3>Advanced Settings</h3>
+                
+                <div class="settings-section">
+                    <div class="setting-item">
+                        <label for="setting-auto-date">
+                            <input type="checkbox" id="setting-auto-date">
+                            Always add date to filenames when saving
+                        </label>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="setting-show-words">
+                            <input type="checkbox" id="setting-show-words" checked>
+                            Show word count
+                        </label>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="setting-show-chars">
+                            <input type="checkbox" id="setting-show-chars" checked>
+                            Show character count
+                        </label>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="setting-show-line-numbers">
+                            <input type="checkbox" id="setting-show-line-numbers">
+                            Show line numbers
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="settings-section links-section">
+                    <h4>Links</h4>
+                    <div class="settings-links">
+                        <a id="info-btn" href="https://github.com/punnerud/peng_editor" target="_blank">
+                            <i class="fas fa-info-circle"></i> About Peng Editor
+                        </a>
+                        <a id="feedback-btn" href="https://github.com/punnerud/peng_editor/issues" target="_blank">
+                            <i class="fas fa-comment"></i> Provide Feedback
+                        </a>
+                    </div>
+                </div>
+                
+                <button id="save-settings-btn">Save Settings</button>
             </div>
         </div>
     </div>
