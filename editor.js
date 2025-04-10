@@ -222,6 +222,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let pipetteDebounceTimer = null; // For debouncing pipette updates
     let lastPipetteElement = null; // Track last element for pipette
     
+    // Text selection drag handle variables
+    let dragHandle = null;
+    let isDragging = false;
+    let draggedText = '';
+    let draggedTextElement = null;
+    let initialMousePosition = { x: 0, y: 0 };
+    let initialSelectionPosition = { x: 0, y: 0 };
+    
     // Initialize editor
     initEditor();
     
@@ -376,6 +384,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
+        // Add a general click handler to remove the drag handle when clicking elsewhere in the editor
+        editor.addEventListener('mousedown', function(e) {
+            // Check if the click was on the drag handle
+            if (dragHandle && !dragHandle.contains(e.target)) {
+                // If not dragging, remove the handle
+                if (!isDragging) {
+                    removeDragHandle();
+                }
+            }
+        });
+        
         // Editor content change event
         editor.addEventListener('input', function() {
             updateWordCount();
@@ -387,12 +406,18 @@ document.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('selectionchange', function() {
             if (document.activeElement === editor) {
                 updateToolbarState();
+                
+                // Handle text selection for drag handle
+                handleTextSelection();
             }
         });
         
         // Update toolbar state when mouse button is released (useful for drag selections)
         editor.addEventListener('mouseup', function() {
             updateToolbarState();
+            
+            // Add a slight delay to let the selection finalize
+            setTimeout(handleTextSelection, 10);
         });
         
         // Update toolbar when key is released (useful for keyboard selections)
@@ -402,6 +427,9 @@ document.addEventListener('DOMContentLoaded', function() {
                            'Home', 'End', 'PageUp', 'PageDown', 'Shift'];
             if (navKeys.includes(e.key) || e.shiftKey) {
                 updateToolbarState();
+                
+                // Handle text selection for keyboard selections
+                setTimeout(handleTextSelection, 10);
             }
         });
         
@@ -2970,14 +2998,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     }
 
-    // Create a variable to store the drag handle element
-    let dragHandle = null;
-    let isDragging = false;
-    let draggedText = '';
-    let draggedTextElement = null;
-    let initialMousePosition = { x: 0, y: 0 };
-    let initialSelectionPosition = { x: 0, y: 0 };
-
     // Function to handle text selection and display the drag handle
     function handleTextSelection() {
         // Remove any existing drag handle
@@ -2997,25 +3017,31 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Get the selection rectangle
+        const rect = range.getBoundingClientRect();
+        
+        // Only proceed if we got valid dimensions
+        if (rect.width === 0 && rect.height === 0) {
+            return;
+        }
+        
         // Create drag handle
         dragHandle = document.createElement('div');
         dragHandle.className = 'text-drag-handle';
         document.body.appendChild(dragHandle);
         
         // Position the drag handle at the end of the selection
-        const rect = range.getBoundingClientRect();
-        dragHandle.style.left = (rect.right) + 'px';
-        dragHandle.style.top = (rect.bottom) + 'px';
+        dragHandle.style.left = rect.right + 'px';
+        dragHandle.style.top = rect.bottom + 'px';
         
         // Set up drag handle events
         dragHandle.addEventListener('mousedown', startDragging);
-        document.addEventListener('mousemove', handleDragging);
-        document.addEventListener('mouseup', stopDragging);
     }
 
     // Function to start dragging process
     function startDragging(event) {
         event.preventDefault();
+        event.stopPropagation();
         
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
@@ -3024,25 +3050,54 @@ document.addEventListener('DOMContentLoaded', function() {
         draggedText = selection.toString();
         if (!draggedText.trim()) return;
         
+        // Get selection details
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        
         // Create an element to show while dragging
         draggedTextElement = document.createElement('div');
         draggedTextElement.className = 'dragging-selection';
-        draggedTextElement.textContent = draggedText;
+        
+        // Limit displayed text length with ellipsis
+        const displayText = draggedText.length > 30 ? 
+            draggedText.substring(0, 30) + '...' : 
+            draggedText;
+        
+        draggedTextElement.textContent = displayText;
+        
+        // Add visual styling to indicate it's being moved
+        draggedTextElement.style.opacity = '0.85';
+        draggedTextElement.style.transform = 'rotate(1deg)';
         document.body.appendChild(draggedTextElement);
         
         // Store initial positions
         initialMousePosition = { x: event.clientX, y: event.clientY };
-        
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
         initialSelectionPosition = { x: rect.left, y: rect.top };
         
         // Update dragged text element position
         draggedTextElement.style.left = initialSelectionPosition.x + 'px';
         draggedTextElement.style.top = initialSelectionPosition.y + 'px';
         
+        // Highlight the original text to indicate it's being moved
+        const originalTextHighlight = document.createElement('span');
+        originalTextHighlight.className = 'dragged-source-highlight';
+        originalTextHighlight.id = 'dragged-source-highlight';
+        
+        // Make a copy of the range contents to highlight the original text 
+        // (this won't be visible in the document, just for reference)
+        try {
+            const originalContent = range.cloneContents();
+            originalTextHighlight.appendChild(originalContent);
+        } catch (e) {
+            console.error('Error creating source highlight:', e);
+        }
+        
         // Mark as dragging
         isDragging = true;
+        
+        // Add document event listeners for move and up
+        document.addEventListener('mousemove', handleDragging);
+        document.addEventListener('mouseup', stopDragging);
     }
 
     // Function to handle the dragging movement
@@ -3055,11 +3110,94 @@ document.addEventListener('DOMContentLoaded', function() {
         // Move the dragged text element
         draggedTextElement.style.left = (initialSelectionPosition.x + deltaX) + 'px';
         draggedTextElement.style.top = (initialSelectionPosition.y + deltaY) + 'px';
+
+        // Find potential drop target
+        const targetElement = document.elementFromPoint(event.clientX, event.clientY);
+        const editorElement = document.getElementById('editor');
+        
+        // Remove previous drop indicator if it exists
+        removeDropIndicator();
+        
+        // Only show drop indicator if we're over the editor
+        if (editorElement.contains(targetElement)) {
+            // Create a temporary range to show where text would be inserted
+            const tempRange = document.createRange();
+            
+            // Determine insertion point based on element type
+            if (targetElement.nodeType === Node.TEXT_NODE) {
+                // For text nodes, find the closest position
+                const offset = calculateOffsetInTextNode(targetElement, event.clientX, event.clientY);
+                tempRange.setStart(targetElement, offset);
+                tempRange.collapse(true);
+            } else if (targetElement.childNodes.length > 0) {
+                // For element nodes with children
+                const childNode = findClosestChildNode(targetElement, event.clientX, event.clientY);
+                if (childNode) {
+                    if (childNode.nodeType === Node.TEXT_NODE) {
+                        const offset = calculateOffsetInTextNode(childNode, event.clientX, event.clientY);
+                        tempRange.setStart(childNode, offset);
+                        tempRange.collapse(true);
+                    } else {
+                        tempRange.setStartBefore(childNode);
+                        tempRange.collapse(true);
+                    }
+                } else {
+                    // If no suitable child, append to element
+                    tempRange.setStart(targetElement, targetElement.childNodes.length);
+                    tempRange.collapse(true);
+                }
+            } else {
+                // For empty elements
+                tempRange.setStart(targetElement, 0);
+                tempRange.collapse(true);
+            }
+            
+            // Create and position drop indicator
+            createDropIndicator(tempRange);
+        }
+        
+        // Remember to prevent text selection during drag
+        event.preventDefault();
+    }
+
+    // Function to create a visual drop indicator
+    function createDropIndicator(range) {
+        // Create indicator element
+        const indicator = document.createElement('div');
+        indicator.className = 'text-drop-indicator';
+        document.body.appendChild(indicator);
+        
+        // Position indicator at the range position
+        const rect = range.getBoundingClientRect();
+        
+        // If we have a valid rect with dimensions
+        if (rect && rect.width !== undefined) {
+            indicator.style.left = rect.left + 'px';
+            indicator.style.top = rect.top + 'px';
+            indicator.style.height = rect.height + 'px';
+        }
+    }
+
+    // Function to remove drop indicator
+    function removeDropIndicator() {
+        const indicator = document.querySelector('.text-drop-indicator');
+        if (indicator) {
+            document.body.removeChild(indicator);
+        }
     }
 
     // Function to complete the drag and insert text at new position
     function stopDragging(event) {
         if (!isDragging) return;
+        
+        // Remove the drop indicator
+        removeDropIndicator();
+        
+        // Remove any source highlight
+        const sourceHighlight = document.getElementById('dragged-source-highlight');
+        if (sourceHighlight && sourceHighlight.parentNode) {
+            sourceHighlight.parentNode.removeChild(sourceHighlight);
+        }
         
         // Get the element under the cursor at drop position
         const targetElement = document.elementFromPoint(event.clientX, event.clientY);
@@ -3067,27 +3205,78 @@ document.addEventListener('DOMContentLoaded', function() {
         // Check if we're still within the editor
         const editorElement = document.getElementById('editor');
         if (editorElement.contains(targetElement)) {
-            // Delete the original text
-            document.execCommand('delete');
+            // Add a visual effect at the drop location
+            const dropEffect = document.createElement('div');
+            dropEffect.className = 'text-drop-effect';
+            dropEffect.style.left = event.clientX + 'px';
+            dropEffect.style.top = event.clientY + 'px';
+            document.body.appendChild(dropEffect);
+            
+            // Remove the effect after animation completes
+            setTimeout(() => {
+                if (dropEffect.parentNode) {
+                    dropEffect.parentNode.removeChild(dropEffect);
+                }
+            }, 500);
+            
+            // Create a range for the current selection (the text we're moving)
+            const selection = window.getSelection();
+            const sourceRange = selection.getRangeAt(0).cloneRange();
             
             // Create a new range at the drop position
             const dropRange = document.createRange();
-            const selection = window.getSelection();
             
-            // Set the selection to where user dropped
+            // Set the range based on the drop target
             if (targetElement.nodeType === Node.TEXT_NODE) {
+                // For text nodes, find the closest position in the text
                 const offset = calculateOffsetInTextNode(targetElement, event.clientX, event.clientY);
                 dropRange.setStart(targetElement, offset);
+            } else if (targetElement.childNodes.length > 0) {
+                // For element nodes with children, try to find the best insertion point
+                const childNode = findClosestChildNode(targetElement, event.clientX, event.clientY);
+                if (childNode) {
+                    if (childNode.nodeType === Node.TEXT_NODE) {
+                        const offset = calculateOffsetInTextNode(childNode, event.clientX, event.clientY);
+                        dropRange.setStart(childNode, offset);
+                    } else {
+                        dropRange.setStartBefore(childNode);
+                    }
+                } else {
+                    // If no suitable child found, append to the element
+                    dropRange.setStart(targetElement, targetElement.childNodes.length);
+                }
             } else {
+                // For empty elements, just set to position 0
                 dropRange.setStart(targetElement, 0);
             }
             
+            // Collapse the range to insertion point
             dropRange.collapse(true);
+            
+            // Clear current selection and set to drop point
+            selection.removeAllRanges();
+            selection.addRange(dropRange);
+            
+            // Store the text we're moving
+            const textToMove = draggedText;
+            
+            // Return to the original selection to delete it
+            selection.removeAllRanges();
+            selection.addRange(sourceRange);
+            
+            // Delete the original text
+            document.execCommand('delete');
+            
+            // Now go back to the drop point
             selection.removeAllRanges();
             selection.addRange(dropRange);
             
             // Insert the text at the new position
-            document.execCommand('insertText', false, draggedText);
+            document.execCommand('insertText', false, textToMove);
+            
+            // Save history and update word count
+            saveHistory();
+            updateWordCount();
             
             // Focus the editor
             editorElement.focus();
@@ -3096,29 +3285,103 @@ document.addEventListener('DOMContentLoaded', function() {
         // Clean up
         isDragging = false;
         if (draggedTextElement) {
-            document.body.removeChild(draggedTextElement);
-            draggedTextElement = null;
+            // Add a fade out animation before removing
+            draggedTextElement.style.opacity = '0';
+            draggedTextElement.style.transition = 'opacity 0.2s ease';
+            
+            // Remove after animation completes
+            setTimeout(() => {
+                if (draggedTextElement && draggedTextElement.parentNode) {
+                    document.body.removeChild(draggedTextElement);
+                    draggedTextElement = null;
+                }
+            }, 200);
         }
         removeDragHandle();
+        
+        // Remove document event listeners
+        document.removeEventListener('mousemove', handleDragging);
+        document.removeEventListener('mouseup', stopDragging);
+    }
+
+    // Helper function to find the closest child node to a position
+    function findClosestChildNode(parentElement, x, y) {
+        if (!parentElement || !parentElement.childNodes.length) return null;
+        
+        let closestNode = null;
+        let closestDistance = Infinity;
+        
+        for (let i = 0; i < parentElement.childNodes.length; i++) {
+            const node = parentElement.childNodes[i];
+            
+            // Skip comment nodes
+            if (node.nodeType === Node.COMMENT_NODE) continue;
+            
+            // For text nodes or element nodes that can be measured
+            if (node.nodeType === Node.TEXT_NODE || node.getBoundingClientRect) {
+                let rect;
+                
+                try {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        // For text nodes, create a temp range
+                        const range = document.createRange();
+                        range.selectNode(node);
+                        rect = range.getBoundingClientRect();
+                    } else {
+                        // For element nodes
+                        rect = node.getBoundingClientRect();
+                    }
+                    
+                    // Calculate distance to the point
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+                    
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        closestNode = node;
+                    }
+                } catch (e) {
+                    console.error('Error measuring node:', e);
+                }
+            }
+        }
+        
+        return closestNode;
     }
 
     // Helper function to calculate text node offset based on position
     function calculateOffsetInTextNode(textNode, x, y) {
-        const range = document.createRange();
         const textLength = textNode.length;
         let bestOffset = 0;
         let bestDistance = Infinity;
         
-        // Simple binary search to find closest position
-        for (let i = 0; i <= textLength; i++) {
-            range.setStart(textNode, i);
-            range.setEnd(textNode, i);
+        // Use binary search for efficiency
+        let start = 0;
+        let end = textLength;
+        
+        while (end - start > 1) {
+            const mid = Math.floor((start + end) / 2);
+            
+            const range = document.createRange();
+            range.setStart(textNode, 0);
+            range.setEnd(textNode, mid);
+            
             const rect = range.getBoundingClientRect();
-            const distance = Math.sqrt(Math.pow(x - rect.left, 2) + Math.pow(y - rect.top, 2));
+            const midX = rect.right;
+            const midY = rect.bottom;
+            
+            const distance = Math.sqrt(Math.pow(x - midX, 2) + Math.pow(y - midY, 2));
             
             if (distance < bestDistance) {
                 bestDistance = distance;
-                bestOffset = i;
+                bestOffset = mid;
+            }
+            
+            if (x < midX) {
+                end = mid;
+            } else {
+                start = mid;
             }
         }
         
@@ -3128,12 +3391,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to remove the drag handle
     function removeDragHandle() {
         if (dragHandle) {
+            dragHandle.removeEventListener('mousedown', startDragging);
             document.body.removeChild(dragHandle);
             dragHandle = null;
         }
-        
-        // Remove event listeners when drag handle is removed
-        document.removeEventListener('mousemove', handleDragging);
-        document.removeEventListener('mouseup', stopDragging);
     }
 }); 
