@@ -822,11 +822,11 @@ body {
     position: absolute;
     top: 0;
     left: 0;
-    width: 30px;
+    width: 35px;
     height: 100%;
     border-right: 1px solid #ddd;
     background-color: #f8f8f8;
-    padding: 20px 5px 20px 0;
+    padding: 15px 0 20px 0;
     color: #999;
     font-size: 12px;
     font-family: monospace;
@@ -837,17 +837,21 @@ body {
 
 .line-number {
     position: absolute;
-    right: 5px;
+    right: 8px;
     text-align: right;
     color: #999;
     font-size: 12px;
     font-family: monospace;
     white-space: nowrap;
-    padding-right: 5px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    width: 100%;
+    width: 90%;
+    transform: translateY(-3px);
+    height: auto !important;
+    min-height: 20px;
+    padding: 2px 0;
+    touch-action: manipulation;
 }
 
 .mirror-textarea {

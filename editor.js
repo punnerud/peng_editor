@@ -4197,9 +4197,16 @@ document.addEventListener('DOMContentLoaded', function() {
             if (index < textRects.length) {
                 const rect = textRects[index];
                 const relativeTop = rect.top - editorRect.top;
-                lineNumber.style.top = `${relativeTop}px`;
-                lineNumber.style.height = `${rect.height}px`;
-                lineNumber.style.lineHeight = `${rect.height}px`;
+                
+                // Set position with a slight offset for better alignment
+                lineNumber.style.top = `${relativeTop - 3}px`;
+                
+                // Set minimum height for touch targets, but don't enforce strict height matching
+                const minHeight = Math.max(20, rect.height);
+                lineNumber.style.minHeight = `${minHeight}px`;
+                
+                // Use padding for additional clickable area
+                lineNumber.style.padding = '3px 0';
             }
         });
     }
