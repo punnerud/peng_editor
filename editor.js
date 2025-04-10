@@ -270,18 +270,26 @@ document.addEventListener('DOMContentLoaded', function() {
         const savedContent = localStorage.getItem('editorContent');
         if (savedContent) {
             editor.innerHTML = savedContent;
-            showNotification('Previous content has been restored', 'info');
+            // Show notification with Clear All button
+            const notification = showNotification('Previous content has been restored', 'info', true);
+            
+            // Add Clear All button to the notification
+            if (notification) {
+                const clearBtn = document.createElement('button');
+                clearBtn.className = 'notification-action-btn';
+                clearBtn.textContent = 'Clear All';
+                clearBtn.addEventListener('click', function() {
+                    clearAllContent();
+                    dismissNotification(notification);
+                });
+                
+                // Add button to notification content
+                const notificationContent = notification.querySelector('.notification-content');
+                if (notificationContent) {
+                    notificationContent.appendChild(clearBtn);
+                }
+            }
         }
-        
-        // Add Clear All button next to Load
-        const clearAllBtn = document.createElement('button');
-        clearAllBtn.id = 'clear-all-btn';
-        clearAllBtn.textContent = 'Clear All';
-        clearAllBtn.addEventListener('click', clearAllContent);
-        
-        // Insert after Load button
-        const buttonGroup = document.querySelector('.button-group');
-        buttonGroup.appendChild(clearAllBtn);
         
         // Setup auto-save to localStorage
         setupAutoSave();
@@ -2740,7 +2748,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Show notification
-    function showNotification(message, type = 'info') {
+    function showNotification(message, type = 'info', persistent = false) {
         // Create notification element
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
@@ -2777,15 +2785,20 @@ document.addEventListener('DOMContentLoaded', function() {
         notificationArea.style.maxHeight = '200px';
         notificationArea.style.padding = '10px';
         
-        // Set up auto-dismiss timer
-        const dismissTimer = setTimeout(() => {
-            dismissNotification(notification);
-        }, 5000);
+        // Set up auto-dismiss timer (if not persistent)
+        let dismissTimer;
+        if (!persistent) {
+            dismissTimer = setTimeout(() => {
+                dismissNotification(notification);
+            }, 5000);
+        }
         
         // Set up manual close button
         const closeBtn = notification.querySelector('.notification-close');
         closeBtn.addEventListener('click', () => {
-            clearTimeout(dismissTimer);
+            if (dismissTimer) {
+                clearTimeout(dismissTimer);
+            }
             dismissNotification(notification);
         });
         
@@ -3901,17 +3914,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Save before user leaves/refreshes the page
         window.addEventListener('beforeunload', saveToLocalStorage);
-        
-        // Hide Clear All button once editing begins
-        const clearAllBtn = document.getElementById('clear-all-btn');
-        const hideButtonOnEdit = () => {
-            if (clearAllBtn && clearAllBtn.style.display !== 'none') {
-                clearAllBtn.style.display = 'none';
-            }
-        };
-        
-        editor.addEventListener('input', hideButtonOnEdit);
-        htmlSource.addEventListener('input', hideButtonOnEdit);
     }
 
     // Function to clear all content with confirmation
