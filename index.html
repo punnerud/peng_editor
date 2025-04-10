@@ -49,6 +49,7 @@
                 <button id="image-btn" title="Insert Image"><i class="fas fa-image"></i></button>
                 <button id="table-btn" title="Insert Table"><i class="fas fa-table"></i></button>
                 <button id="code-btn" title="Insert Code"><i class="fas fa-code"></i></button>
+                <button id="emoji-btn" title="Insert Emoji"><i class="far fa-smile"></i></button>
             </div>
             <div class="toolbar-group">
                 <input type="color" id="forecolor-picker" title="Text Color">
@@ -92,7 +93,10 @@
                 <button id="load-btn">Load</button>
             </div>
             <div class="word-count">Words: <span id="word-count">0</span></div>
-            <div class="char-count">Characters: <span id="char-count">0</span></div>
+            <div class="char-count">
+                <button id="quick-emoji-btn" class="quick-emoji-button" style="display: none;">👍</button>
+                Characters: <span id="char-count">0</span>
+            </div>
         </div>
         
         <div id="notification-area" class="notification-area">
@@ -166,6 +170,36 @@
                     <input type="number" id="table-border" min="0" value="1">
                 </div>
                 <button id="insert-table-btn">Insert</button>
+            </div>
+        </div>
+        
+        <div id="emoji-dialog" class="dialog">
+            <div class="dialog-content">
+                <span class="close-dialog">&times;</span>
+                <h3>Insert Emoji</h3>
+                <div class="emoji-search-container">
+                    <input type="text" id="emoji-search" placeholder="Search emojis...">
+                </div>
+                <div class="emoji-categories">
+                    <button class="emoji-category active" data-category="smileys">😀</button>
+                    <button class="emoji-category" data-category="people">👋</button>
+                    <button class="emoji-category" data-category="animals">🐶</button>
+                    <button class="emoji-category" data-category="food">🍎</button>
+                    <button class="emoji-category" data-category="travel">🚗</button>
+                    <button class="emoji-category" data-category="activities">⚽</button>
+                    <button class="emoji-category" data-category="objects">💡</button>
+                    <button class="emoji-category" data-category="symbols">❤️</button>
+                    <button class="emoji-category" data-category="flags">🏁</button>
+                </div>
+                <div class="emoji-grid" id="emoji-grid">
+                    <!-- Emojis will be loaded here dynamically -->
+                </div>
+                <div class="recently-used-emojis">
+                    <h4>Recently Used</h4>
+                    <div class="emoji-grid" id="recent-emojis">
+                        <!-- Recent emojis will be shown here -->
+                    </div>
+                </div>
             </div>
         </div>
     </div>

@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const imageBtn = document.getElementById('image-btn');
     const tableBtn = document.getElementById('table-btn');
     const codeBtn = document.getElementById('code-btn');
+    const emojiBtn = document.getElementById('emoji-btn');
     const forecolorPicker = document.getElementById('forecolor-picker');
     const backcolorPicker = document.getElementById('backcolor-picker');
     const fontFamily = document.getElementById('font-family');
@@ -58,6 +59,148 @@ document.addEventListener('DOMContentLoaded', function() {
     const tableHeader = document.getElementById('table-header');
     const tableBorder = document.getElementById('table-border');
     const insertTableBtn = document.getElementById('insert-table-btn');
+    
+    const emojiDialog = document.getElementById('emoji-dialog');
+    const emojiSearch = document.getElementById('emoji-search');
+    const emojiGrid = document.getElementById('emoji-grid');
+    const emojiCategories = document.querySelectorAll('.emoji-category');
+    const recentEmojis = document.getElementById('recent-emojis');
+    
+    // Emoji data
+    const emojiData = {
+        smileys: [
+            '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', 
+            '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', 
+            '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', 
+            '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', 
+            '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', 
+            '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '😎', '🤓', 
+            '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', 
+            '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', 
+            '😞', '😓', '😩', '😫', '🥱', '😤'
+        ],
+        people: [
+            '👋', '🤚', '✋', '🖖', '👌', '🤏', '✌️', '🤞', '🤟', '🤘', 
+            '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', 
+            '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', 
+            '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', 
+            '🧠', '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋', '👶', '🧒', 
+            '👦', '👧', '🧑', '👱', '👨', '🧔', '👨‍🦰', '👨‍🦱', '👨‍🦳', '👨‍🦲', 
+            '👩', '👩‍🦰', '👩‍🦱', '👩‍🦳', '👩‍🦲', '👱‍♀️', '👱‍♂️', '🧓', '👴', '👵', 
+            '🙍', '🙍‍♂️', '🙍‍♀️', '🙎', '🙎‍♂️', '🙎‍♀️', '🙅', '🙅‍♂️', '🙅‍♀️', '🙆', 
+            '🙆‍♂️', '🙆‍♀️', '💁', '💁‍♂️', '💁‍♀️', '🙋', '🙋‍♂️', '🙋‍♀️', '🧏', '🧏‍♂️', 
+            '🧏‍♀️', '🙇', '🙇‍♂️', '🙇‍♀️', '🤦', '🤦‍♂️', '🤦‍♀️', '🤷', '🤷‍♂️', '🤷‍♀️'
+        ],
+        animals: [
+            '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', 
+            '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', 
+            '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', 
+            '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', 
+            '🦟', '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', 
+            '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', 
+            '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🐘', '🦛', 
+            '🦏', '🐪', '🐫', '🦒', '🦘', '🐃', '🐂', '🐄', '🐎', '🐖', 
+            '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', 
+            '🐓', '🦃', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨', 
+            '🦡', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔'
+        ],
+        food: [
+            '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍈', '🍒', 
+            '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', 
+            '🥒', '🌶️', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', 
+            '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', 
+            '🍔', '🍟', '🍕', '🌭', '🥪', '🌮', '🌯', '🥙', '🧆', '🥘', 
+            '🍲', '🥣', '🥗', '🍿', '🧈', '🧂', '🥫', '🍱', '🍘', '🍙', 
+            '🍚', '🍛', '🍜', '🍝', '🍠', '🍢', '🍣', '🍤', '🍥', '🥮', 
+            '🍡', '🥟', '🥠', '🥡', '🦪', '🍦', '🍧', '🍨', '🍩', '🍪', 
+            '🎂', '🍰', '🧁', '🥧', '🍫', '🍬', '🍭', '🍮', '🍯', '🍼', 
+            '🥛', '☕', '🍵', '🍶', '🍾', '🍷', '🍸', '🍹', '🍺', '🍻', 
+            '🥂', '🥃', '🥤', '🧃', '🧉', '🧊'
+        ],
+        travel: [
+            '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', 
+            '🚚', '🚛', '🚜', '🛴', '🚲', '🛵', '🏍️', '🚨', '🚔', '🚍', 
+            '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞', '🚝', '🚄', 
+            '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', 
+            '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵', '🚤', '🛥️', 
+            '🛳️', '⛴️', '🚢', '⚓', '⛽', '🚧', '🚦', '🚥', '🚏', '🗺️', 
+            '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢', '🎠', '⛲', 
+            '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻', '🏕️', '⛺', 
+            '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏭', '🏢', '🏬', '🏣', '🏤', 
+            '🏥', '🏦', '🏨', '🏪', '🏫', '🏩', '💒', '🏛️', '⛪', '🕌', 
+            '🕍', '🛕', '🕋', '⛩️', '🛤️', '🛣️', '🗾', '🎑', '🏞️', '🌅', 
+            '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙️', '🌃', '🌌', '🌉', 
+            '🌁'
+        ],
+        activities: [
+            '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', 
+            '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🥅', '⛳', '🪁', 
+            '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸️', 
+            '🥌', '🎿', '⛷️', '🏂', '🪂', '🏋️', '🏋️‍♂️', '🏋️‍♀️', '🤼', '🤼‍♂️', 
+            '🤼‍♀️', '🤸', '🤸‍♂️', '🤸‍♀️', '⛹️', '⛹️‍♂️', '⛹️‍♀️', '🤺', '🤾', '🤾‍♂️', 
+            '🤾‍♀️', '🏌️', '🏌️‍♂️', '🏌️‍♀️', '🏇', '🧘', '🧘‍♂️', '🧘‍♀️', '🏄', '🏄‍♂️', 
+            '🏄‍♀️', '🏊', '🏊‍♂️', '🏊‍♀️', '🤽', '🤽‍♂️', '🤽‍♀️', '🚣', '🚣‍♂️', '🚣‍♀️', 
+            '🧗', '🧗‍♂️', '🧗‍♀️', '🚵', '🚵‍♂️', '🚵‍♀️', '🚴', '🚴‍♂️', '🚴‍♀️', '🏆', 
+            '🥇', '🥈', '🥉', '🏅', '🎖️', '🏵️', '🎗️', '🎫', '🎟️', '🎪', 
+            '🤹', '🤹‍♂️', '🤹‍♀️', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', 
+            '🥁', '🎷', '🎺', '🎸', '🪕', '🎻', '🎲', '♟️', '🎯', '🎳', 
+            '🎮', '🎰', '🧩'
+        ],
+        objects: [
+            '💡', '🔦', '🏮', '🪔', '📔', '📕', '📖', '📗', '📘', '📙', 
+            '📚', '📓', '📒', '📃', '📜', '📄', '📰', '🗞️', '📑', '🔖', 
+            '🏷️', '💰', '💴', '💵', '💶', '💷', '💸', '💳', '🧾', '💹', 
+            '✉️', '📧', '📨', '📩', '📤', '📥', '📦', '📫', '📪', '📬', 
+            '📭', '📮', '🗳️', '✏️', '✒️', '🖋️', '🖊️', '🖌️', '🖍️', '📝', 
+            '💼', '📁', '📂', '🗂️', '📅', '📆', '🗒️', '🗓️', '📇', '📈', 
+            '📉', '📊', '📋', '📌', '📍', '📎', '🖇️', '📏', '📐', '✂️', 
+            '🗃️', '🗄️', '🗑️', '🔒', '🔓', '🔏', '🔐', '🔑', '🗝️', '🔨', 
+            '🪓', '⛏️', '⚒️', '🛠️', '🗡️', '⚔️', '🔫', '🏹', '🛡️', '🔧', 
+            '🔩', '⚙️', '🗜️', '⚖️', '🦯', '🔗', '⛓️', '🧰', '🧲', '⚗️', 
+            '🧪', '🧫', '🧬', '🔬', '🔭', '📡', '💉', '🩸', '💊', '🩹', 
+            '🩺', '🚪', '🛏️', '🛋️', '🪑', '🚽', '🚿', '🛁', '🪒', '🧴', 
+            '🧷', '🧹', '🧺', '🧻', '🧼', '🧽', '🧯', '🛒', '🚬', '⚰️', 
+            '⚱️', '🗿', '🏧', '🚮', '🚰', '♿', '🚹', '🚺', '🚻', '🚼', 
+            '🚾', '🛂', '🛃', '🛄', '🛅'
+        ],
+        symbols: [
+            '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', 
+            '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', 
+            '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', 
+            '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', 
+            '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️', '📴', '📳', 
+            '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️', '🆚', '💮', '🉐', '㊙️', 
+            '㊗️', '🈴', '🈵', '🈹', '🈲', '🅰️', '🅱️', '🆎', '🆑', '🅾️', 
+            '🆘', '❌', '⭕', '🛑', '⛔', '📛', '🚫', '💯', '💢', '♨️', 
+            '🚷', '🚯', '🚳', '🚱', '🔞', '📵', '🚭', '❗', '❕', '❓', 
+            '❔', '‼️', '⁉️', '🔅', '🔆', '〽️', '⚠️', '🚸', '🔱', '⚜️', 
+            '🔰', '♻️', '✅', '🈯', '💹', '❇️', '✳️', '❎', '🌐', '💠', 
+            'Ⓜ️', '🌀', '💤', '🏧', '🚾', '♿', '🅿️', '🈳', '🈂️', '🛂', 
+            '🛃', '🛄', '🛅', '🚹', '🚺', '🚼', '🚻', '🚮', '🎦', '📶', 
+            '🈁', '🔣', 'ℹ️', '🔤', '🔡', '🔠', '🆖', '🆗', '🆙', '🆒', 
+            '🆕', '🆓', '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', 
+            '8️⃣', '9️⃣', '🔟', '🔢', '#️⃣', '*️⃣', '⏏️', '▶️', '⏸️', '⏯️', 
+            '⏹️', '⏺️', '⏭️', '⏮️', '⏩', '⏪', '⏫', '⏬', '◀️', '🔼', 
+            '🔽', '➡️', '⬅️', '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '↕️', 
+            '↔️', '↪️', '↩️', '⤴️', '⤵️', '🔀', '🔁', '🔂', '🔄', '🔃', 
+            '🎵', '🎶', '〰️', '➰', '➿', '✔️', '☑️', '🔘', '🔴', '🟠', 
+            '🟡', '🟢', '🔵', '🟣', '⚫', '⚪', '🟤', '🔺', '🔻', '🔸', 
+            '🔹', '🔶', '🔷', '🔳', '🔲', '▪️', '▫️', '◾', '◽', '◼️', 
+            '◻️', '⬛', '⬜', '🟥', '🟧', '🟨', '🟩', '🟦', '🟪', '🟫'
+        ],
+        flags: [
+            '🏁', '🚩', '🎌', '🏴', '🏳️', '🏳️‍🌈', '🏴‍☠️', '🇦🇨', '🇦🇩', '🇦🇪', 
+            '🇦🇫', '🇦🇬', '🇦🇮', '🇦🇱', '🇦🇲', '🇦🇴', '🇦🇶', '🇦🇷', '🇦🇸', '🇦🇹', 
+            '🇦🇺', '🇦🇼', '🇦🇽', '🇦🇿', '🇧🇦', '🇧🇧', '🇧🇩', '🇧🇪', '🇧🇫', '🇧🇬', 
+            '🇧🇭', '🇧🇮', '🇧🇯', '🇧🇱', '🇧🇲', '🇧🇳', '🇧🇴', '🇧🇶', '🇧🇷', '🇧🇸', 
+            '🇧🇹', '🇧🇻', '🇧🇼', '🇧🇾', '🇧🇿', '🇨🇦', '🇨🇨', '🇨🇩', '🇨🇫', '🇨🇬', 
+            '🇨🇭', '🇨🇮', '🇨🇰', '🇨🇱', '🇨🇲', '🇨🇳', '🇨🇴', '🇨🇵', '🇨🇷', '🇨🇺', 
+            '🇨🇻', '🇨🇼', '🇨🇽', '🇨🇾', '🇨🇿', '🇩🇪', '🇩🇬', '🇩🇯', '🇩🇰', '🇩🇲'
+        ]
+    };
+    
+    // Store recently used emojis
+    let recentEmojisList = [];
     
     // Create a hidden file input for loading HTML files
     const fileInput = document.createElement('input');
@@ -288,6 +431,7 @@ document.addEventListener('DOMContentLoaded', function() {
         imageBtn.addEventListener('click', showImageDialog);
         tableBtn.addEventListener('click', showTableDialog);
         codeBtn.addEventListener('click', insertCodeBlock);
+        emojiBtn.addEventListener('click', showEmojiDialog);
         
         // Add event listeners to color pickers
         forecolorPicker.addEventListener('input', function() {
@@ -343,6 +487,22 @@ document.addEventListener('DOMContentLoaded', function() {
             if (event.target.classList.contains('dialog')) {
                 hideAllDialogs();
             }
+        });
+        
+        // Emoji search event listener
+        emojiSearch.addEventListener('input', handleEmojiSearch);
+        
+        // Emoji category buttons event listeners
+        emojiCategories.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                setActiveEmojiCategory(this.dataset.category);
+            });
+        });
+        
+        // Selection change event to update toolbar and show drag handle
+        document.addEventListener('selectionchange', function() {
+            updateToolbar();
+            handleTextSelection();
         });
     }
     
@@ -1128,19 +1288,59 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show table dialog
     function showTableDialog() {
+        console.log('Opening table dialog');
         tableDialog.style.display = 'flex';
         tableRows.focus();
+        
+        // Store current selection if any
+        const selection = window.getSelection();
+        let selectedText = '';
+        
+        if (selection.rangeCount > 0) {
+            // Get any selected text
+            selectedText = selection.toString().trim();
+            
+            // Store the range for later use
+            window.storedRange = selection.getRangeAt(0).cloneRange();
+            console.log(`Stored range for table insertion with text: "${selectedText}"`);
+            
+            // Highlight the selection if there is text
+            if (selectedText) {
+                // Use surroundContents to wrap the selection in a highlight span
+                const range = selection.getRangeAt(0);
+                const highlightSpan = document.createElement('span');
+                highlightSpan.style.backgroundColor = '#FFFF80';
+                
+                try {
+                    // Try to surround the contents with the span
+                    range.surroundContents(highlightSpan);
+                    console.log('Highlighted selected text for table');
+                } catch (e) {
+                    console.error('Could not highlight using surroundContents:', e);
+                    // Fallback - use execCommand to highlight
+                    document.execCommand('hiliteColor', false, '#FFFF80');
+                    console.log('Highlighted selected text using execCommand');
+                }
+            }
+        } else {
+            console.log('No selection range to store for table insertion');
+            window.storedRange = null;
+        }
     }
     
     // Insert table
     function insertTable() {
+        console.log('Starting table insertion process');
         const rows = parseInt(tableRows.value) || 3;
         const cols = parseInt(tableCols.value) || 3;
         const hasHeader = tableHeader.checked;
         const border = parseInt(tableBorder.value) || 1;
         
+        console.log(`Table params: rows=${rows}, cols=${cols}, hasHeader=${hasHeader}, border=${border}`);
+        
         if (rows > 0 && cols > 0) {
             if (isSourceView) {
+                console.log('Inserting table in source view mode');
                 let tableHTML = `<table border="${border}" style="width:100%;">\n`;
                 
                 if (hasHeader) {
@@ -1163,8 +1363,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 tableHTML += '  </tbody>\n</table>';
                 
+                console.log('Generated table HTML for source view:', tableHTML);
                 insertAtCursor(htmlSource, tableHTML);
+                console.log('Table HTML inserted into source view');
             } else {
+                console.log('Inserting table in visual editor mode');
                 // Generate table HTML
                 let tableHTML = `<table border="${border}" style="width:100%;">`;
                 
@@ -1188,17 +1391,93 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 tableHTML += '</tbody></table>';
                 
-                // Insert the table using execCommand
-                document.execCommand('insertHTML', false, tableHTML);
+                console.log('Generated table HTML for visual editor:', tableHTML);
                 
-                // Focus back on the editor
-                editor.focus();
+                // First remove any existing highlighting
+                removeHighlighting();
+                
+                try {
+                    // First ensure we have focus
+                    console.log('Ensuring editor has focus before table insertion');
+                    ensureEditorFocus();
+                    
+                    if (window.storedRange) {
+                        console.log('Using stored range for table insertion');
+                        
+                        // Create a new selection using the stored range
+                        const selection = window.getSelection();
+                        selection.removeAllRanges();
+                        selection.addRange(window.storedRange);
+                        
+                        // First delete the selected content
+                        document.execCommand('delete');
+                        
+                        // Then insert the table
+                        document.execCommand('insertHTML', false, tableHTML);
+                        
+                        console.log('Replaced selected content with table');
+                        
+                        // Clear stored range
+                        window.storedRange = null;
+                    } else {
+                        // Insert the table using execCommand at current position
+                        console.log('Executing insertHTML command for table at current position');
+                        document.execCommand('insertHTML', false, tableHTML);
+                        console.log('Table HTML inserted via execCommand');
+                    }
+                    
+                    // Focus back on the editor
+                    editor.focus();
+                    
+                    // Check if table was actually inserted
+                    setTimeout(() => {
+                        const tables = editor.querySelectorAll('table');
+                        console.log(`Number of tables in editor after insertion: ${tables.length}`);
+                    }, 100);
+                } catch (error) {
+                    console.error('Error during table insertion:', error);
+                    
+                    // Fallback method if execCommand fails
+                    try {
+                        console.log('Trying fallback method for table insertion');
+                        const selection = window.getSelection();
+                        if (selection.rangeCount > 0) {
+                            const range = selection.getRangeAt(0);
+                            range.deleteContents();
+                            
+                            // Create table element from HTML
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = tableHTML;
+                            const tableElement = tempDiv.firstChild;
+                            
+                            // Insert the table
+                            range.insertNode(tableElement);
+                            console.log('Table inserted using DOM methods fallback');
+                        } else {
+                            // Last resort - append to editor
+                            console.log('No selection range, appending table to editor content');
+                            editor.innerHTML += tableHTML;
+                        }
+                    } catch (fallbackError) {
+                        console.error('All table insertion methods failed:', fallbackError);
+                    }
+                }
             }
             
+            console.log('Saving history after table insertion');
             saveHistory();
+        } else {
+            console.warn('Invalid table dimensions. Rows and columns must be greater than 0.');
         }
         
+        console.log('Hiding table dialog');
         hideAllDialogs();
+        
+        // Verify if the table exists in the editor after insertion
+        setTimeout(() => {
+            const tableCount = editor.querySelectorAll('table').length;
+            console.log(`Final check: ${tableCount} tables found in editor`);
+        }, 500);
     }
     
     // Insert code block
@@ -1336,12 +1615,23 @@ document.addEventListener('DOMContentLoaded', function() {
         linkDialog.style.display = 'none';
         imageDialog.style.display = 'none';
         tableDialog.style.display = 'none';
+        emojiDialog.style.display = 'none';
         
-        // Clear stored selection data
-        window.selectionData = null;
+        // Clear dialog inputs
+        linkUrl.value = '';
+        linkText.value = '';
+        linkTarget.checked = false;
         
-        // Clean up any highlights left when closing dialogs
-        removeHighlighting();
+        imageUrl.value = '';
+        imageAlt.value = '';
+        imageWidth.value = '';
+        imageHeight.value = '';
+        
+        // Note: We don't clear storedRange here as it needs to persist
+        // for emoji insertion. It will be cleared after insertion.
+        
+        // Return focus to editor
+        editor.focus();
     }
     
     // Remove highlighting from editor content
@@ -2403,5 +2693,447 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) {
             console.error('Error updating color pickers on click:', e);
         }
+    }
+    
+    // Show emoji dialog
+    function showEmojiDialog() {
+        // Store the current selection for later use
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            // Store the range for later use
+            window.storedRange = selection.getRangeAt(0).cloneRange();
+            console.log('Stored range for emoji insertion');
+        }
+        
+        // Clear the search field
+        emojiSearch.value = '';
+        
+        // Ensure we have focus and selection in the editor
+        ensureEditorFocus();
+        
+        // Show emoji dialog
+        emojiDialog.style.display = 'flex';
+        
+        // Set active category
+        setActiveEmojiCategory('smileys');
+        
+        // Focus the search field
+        setTimeout(() => {
+            emojiSearch.focus();
+        }, 100);
+        
+        // Load recently used emojis
+        loadRecentEmojis();
+    }
+    
+    // Set active emoji category
+    function setActiveEmojiCategory(category) {
+        // Remove active class from all category buttons
+        emojiCategories.forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Add active class to selected category
+        document.querySelector(`.emoji-category[data-category="${category}"]`).classList.add('active');
+        
+        // Load emojis for the category
+        loadEmojis(category);
+    }
+    
+    // Load emojis for a category
+    function loadEmojis(category) {
+        // Clear the emoji grid
+        emojiGrid.innerHTML = '';
+        
+        // Get emojis for the category
+        const emojis = emojiData[category];
+        
+        // Create emoji items and add them to the grid
+        emojis.forEach(emoji => {
+            const emojiItem = document.createElement('div');
+            emojiItem.classList.add('emoji-item');
+            emojiItem.textContent = emoji;
+            emojiItem.title = `Insert ${emoji}`;
+            emojiItem.addEventListener('click', () => {
+                insertEmoji(emoji);
+            });
+            
+            emojiGrid.appendChild(emojiItem);
+        });
+    }
+    
+    // Handle search in emoji dialog
+    function handleEmojiSearch() {
+        const searchTerm = emojiSearch.value.toLowerCase();
+        
+        if (!searchTerm) {
+            // If search term is empty, show the active category
+            const activeCategory = document.querySelector('.emoji-category.active').dataset.category;
+            loadEmojis(activeCategory);
+            return;
+        }
+        
+        // Clear the emoji grid
+        emojiGrid.innerHTML = '';
+        
+        // Search in all categories
+        let results = [];
+        for (const category in emojiData) {
+            const categoryEmojis = emojiData[category];
+            // Add all emojis from the category (no real search, just display all when searching)
+            // In a real implementation, we would filter based on emoji descriptions
+            results = results.concat(categoryEmojis);
+        }
+        
+        // Limit results to prevent performance issues
+        results = results.slice(0, 100);
+        
+        // Create emoji items and add them to the grid
+        results.forEach(emoji => {
+            const emojiItem = document.createElement('div');
+            emojiItem.classList.add('emoji-item');
+            emojiItem.textContent = emoji;
+            emojiItem.title = `Insert ${emoji}`;
+            emojiItem.addEventListener('click', () => {
+                insertEmoji(emoji);
+            });
+            
+            emojiGrid.appendChild(emojiItem);
+        });
+    }
+    
+    // Insert emoji at cursor position
+    function insertEmoji(emoji) {
+        // First restore the saved selection if available
+        if (window.storedRange) {
+            try {
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(window.storedRange);
+                console.log('Restored selection range for emoji insertion');
+            } catch (err) {
+                console.error('Error restoring selection for emoji:', err);
+            }
+        }
+        
+        // Ensure we have focus and selection in the editor
+        ensureEditorFocus();
+        
+        // Execute command to insert the emoji
+        document.execCommand('insertText', false, emoji);
+        
+        // Save to recently used emojis
+        addToRecentEmojis(emoji);
+        
+        // Show quick emoji button
+        showQuickEmojiButton(emoji);
+        
+        // Close the emoji dialog
+        hideAllDialogs();
+        
+        // Update word count
+        updateWordCount();
+        
+        // Save history
+        saveHistory();
+        
+        // Clear the stored range
+        window.storedRange = null;
+    }
+    
+    // Add emoji to recently used list
+    function addToRecentEmojis(emoji) {
+        // Remove if already exists
+        recentEmojisList = recentEmojisList.filter(item => item !== emoji);
+        
+        // Add to beginning of the list
+        recentEmojisList.unshift(emoji);
+        
+        // Limit to 16 recent emojis
+        if (recentEmojisList.length > 16) {
+            recentEmojisList = recentEmojisList.slice(0, 16);
+        }
+        
+        // Save to local storage
+        localStorage.setItem('recentEmojis', JSON.stringify(recentEmojisList));
+    }
+    
+    // Load recently used emojis
+    function loadRecentEmojis() {
+        // Clear the recent emojis grid
+        recentEmojis.innerHTML = '';
+        
+        // Try to get from local storage
+        const storedEmojis = localStorage.getItem('recentEmojis');
+        if (storedEmojis) {
+            recentEmojisList = JSON.parse(storedEmojis);
+        }
+        
+        // If no recent emojis, hide the section
+        if (recentEmojisList.length === 0) {
+            document.querySelector('.recently-used-emojis').style.display = 'none';
+            return;
+        }
+        
+        // Show the section
+        document.querySelector('.recently-used-emojis').style.display = 'block';
+        
+        // Create emoji items and add them to the grid
+        recentEmojisList.forEach(emoji => {
+            const emojiItem = document.createElement('div');
+            emojiItem.classList.add('emoji-item');
+            emojiItem.textContent = emoji;
+            emojiItem.title = `Insert ${emoji}`;
+            emojiItem.addEventListener('click', () => {
+                insertEmoji(emoji);
+            });
+            
+            recentEmojis.appendChild(emojiItem);
+        });
+    }
+
+    // Show the quick emoji button with the last used emoji
+    function showQuickEmojiButton(emoji) {
+        // Get the quick emoji button
+        const quickEmojiBtn = document.getElementById('quick-emoji-btn');
+        
+        // Clear any existing timeout
+        if (window.quickEmojiBtnTimeout) {
+            clearTimeout(window.quickEmojiBtnTimeout);
+        }
+        
+        // Set the button text to the emoji
+        quickEmojiBtn.textContent = emoji;
+        
+        // Store the emoji for reuse
+        quickEmojiBtn.dataset.emoji = emoji;
+        
+        // Show the button
+        quickEmojiBtn.style.display = 'inline-flex';
+        quickEmojiBtn.style.opacity = '1';
+        
+        // Add click handler if not already added
+        if (!quickEmojiBtn.hasClickListener) {
+            quickEmojiBtn.addEventListener('click', handleQuickEmojiClick);
+            quickEmojiBtn.hasClickListener = true;
+        }
+        
+        // Set a timeout to hide the button after 5 seconds
+        window.quickEmojiBtnTimeout = setTimeout(() => {
+            hideQuickEmojiButton();
+        }, 5000);
+    }
+
+    // Handle click on quick emoji button
+    function handleQuickEmojiClick() {
+        // Get the emoji from the button
+        const emoji = this.dataset.emoji;
+        
+        // Focus the editor and ensure selection
+        const editor = document.getElementById('editor');
+        editor.focus();
+        
+        // Insert the emoji
+        document.execCommand('insertText', false, emoji);
+        
+        // Reset the timeout
+        if (window.quickEmojiBtnTimeout) {
+            clearTimeout(window.quickEmojiBtnTimeout);
+        }
+        
+        // Set a new timeout
+        window.quickEmojiBtnTimeout = setTimeout(() => {
+            hideQuickEmojiButton();
+        }, 5000);
+        
+        // Save history and update word count
+        if (typeof saveHistory === 'function') {
+            saveHistory();
+        }
+        
+        if (typeof updateWordCount === 'function') {
+            updateWordCount();
+        }
+    }
+
+    // Hide the quick emoji button with animation
+    function hideQuickEmojiButton() {
+        const quickEmojiBtn = document.getElementById('quick-emoji-btn');
+        
+        // Add the fade out animation
+        quickEmojiBtn.style.animation = 'quickEmojiButtonFadeOut 0.5s forwards';
+        
+        // Hide the button after animation completes
+        setTimeout(() => {
+            quickEmojiBtn.style.display = 'none';
+            quickEmojiBtn.style.animation = '';
+        }, 500);
+    }
+
+    // Create a variable to store the drag handle element
+    let dragHandle = null;
+    let isDragging = false;
+    let draggedText = '';
+    let draggedTextElement = null;
+    let initialMousePosition = { x: 0, y: 0 };
+    let initialSelectionPosition = { x: 0, y: 0 };
+
+    // Function to handle text selection and display the drag handle
+    function handleTextSelection() {
+        // Remove any existing drag handle
+        removeDragHandle();
+        
+        const selection = window.getSelection();
+        
+        // If there's no selection or it's collapsed (cursor only), return
+        if (!selection || selection.isCollapsed || !selection.rangeCount) {
+            return;
+        }
+        
+        // Make sure we're selecting within the editor
+        const range = selection.getRangeAt(0);
+        const editorElement = document.getElementById('editor');
+        if (!editorElement.contains(range.commonAncestorContainer)) {
+            return;
+        }
+        
+        // Create drag handle
+        dragHandle = document.createElement('div');
+        dragHandle.className = 'text-drag-handle';
+        document.body.appendChild(dragHandle);
+        
+        // Position the drag handle at the end of the selection
+        const rect = range.getBoundingClientRect();
+        dragHandle.style.left = (rect.right) + 'px';
+        dragHandle.style.top = (rect.bottom) + 'px';
+        
+        // Set up drag handle events
+        dragHandle.addEventListener('mousedown', startDragging);
+        document.addEventListener('mousemove', handleDragging);
+        document.addEventListener('mouseup', stopDragging);
+    }
+
+    // Function to start dragging process
+    function startDragging(event) {
+        event.preventDefault();
+        
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        
+        // Store the selected text
+        draggedText = selection.toString();
+        if (!draggedText.trim()) return;
+        
+        // Create an element to show while dragging
+        draggedTextElement = document.createElement('div');
+        draggedTextElement.className = 'dragging-selection';
+        draggedTextElement.textContent = draggedText;
+        document.body.appendChild(draggedTextElement);
+        
+        // Store initial positions
+        initialMousePosition = { x: event.clientX, y: event.clientY };
+        
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        initialSelectionPosition = { x: rect.left, y: rect.top };
+        
+        // Update dragged text element position
+        draggedTextElement.style.left = initialSelectionPosition.x + 'px';
+        draggedTextElement.style.top = initialSelectionPosition.y + 'px';
+        
+        // Mark as dragging
+        isDragging = true;
+    }
+
+    // Function to handle the dragging movement
+    function handleDragging(event) {
+        if (!isDragging || !draggedTextElement) return;
+        
+        const deltaX = event.clientX - initialMousePosition.x;
+        const deltaY = event.clientY - initialMousePosition.y;
+        
+        // Move the dragged text element
+        draggedTextElement.style.left = (initialSelectionPosition.x + deltaX) + 'px';
+        draggedTextElement.style.top = (initialSelectionPosition.y + deltaY) + 'px';
+    }
+
+    // Function to complete the drag and insert text at new position
+    function stopDragging(event) {
+        if (!isDragging) return;
+        
+        // Get the element under the cursor at drop position
+        const targetElement = document.elementFromPoint(event.clientX, event.clientY);
+        
+        // Check if we're still within the editor
+        const editorElement = document.getElementById('editor');
+        if (editorElement.contains(targetElement)) {
+            // Delete the original text
+            document.execCommand('delete');
+            
+            // Create a new range at the drop position
+            const dropRange = document.createRange();
+            const selection = window.getSelection();
+            
+            // Set the selection to where user dropped
+            if (targetElement.nodeType === Node.TEXT_NODE) {
+                const offset = calculateOffsetInTextNode(targetElement, event.clientX, event.clientY);
+                dropRange.setStart(targetElement, offset);
+            } else {
+                dropRange.setStart(targetElement, 0);
+            }
+            
+            dropRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(dropRange);
+            
+            // Insert the text at the new position
+            document.execCommand('insertText', false, draggedText);
+            
+            // Focus the editor
+            editorElement.focus();
+        }
+        
+        // Clean up
+        isDragging = false;
+        if (draggedTextElement) {
+            document.body.removeChild(draggedTextElement);
+            draggedTextElement = null;
+        }
+        removeDragHandle();
+    }
+
+    // Helper function to calculate text node offset based on position
+    function calculateOffsetInTextNode(textNode, x, y) {
+        const range = document.createRange();
+        const textLength = textNode.length;
+        let bestOffset = 0;
+        let bestDistance = Infinity;
+        
+        // Simple binary search to find closest position
+        for (let i = 0; i <= textLength; i++) {
+            range.setStart(textNode, i);
+            range.setEnd(textNode, i);
+            const rect = range.getBoundingClientRect();
+            const distance = Math.sqrt(Math.pow(x - rect.left, 2) + Math.pow(y - rect.top, 2));
+            
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestOffset = i;
+            }
+        }
+        
+        return bestOffset;
+    }
+
+    // Function to remove the drag handle
+    function removeDragHandle() {
+        if (dragHandle) {
+            document.body.removeChild(dragHandle);
+            dragHandle = null;
+        }
+        
+        // Remove event listeners when drag handle is removed
+        document.removeEventListener('mousemove', handleDragging);
+        document.removeEventListener('mouseup', stopDragging);
     }
 }); 
