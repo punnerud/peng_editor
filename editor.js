@@ -265,6 +265,26 @@ document.addEventListener('DOMContentLoaded', function() {
         setupEventListeners();
         
         console.log('Editor initialized with content:', editor.innerHTML);
+        
+        // Load content from localStorage if available
+        const savedContent = localStorage.getItem('editorContent');
+        if (savedContent) {
+            editor.innerHTML = savedContent;
+            showNotification('Previous content has been restored', 'info');
+        }
+        
+        // Add Clear All button next to Load
+        const clearAllBtn = document.createElement('button');
+        clearAllBtn.id = 'clear-all-btn';
+        clearAllBtn.textContent = 'Clear All';
+        clearAllBtn.addEventListener('click', clearAllContent);
+        
+        // Insert after Load button
+        const buttonGroup = document.querySelector('.button-group');
+        buttonGroup.appendChild(clearAllBtn);
+        
+        // Setup auto-save to localStorage
+        setupAutoSave();
     }
     
     // Set up the pipette button
@@ -495,6 +515,129 @@ document.addEventListener('DOMContentLoaded', function() {
         sourceBtn.addEventListener('click', toggleSourceView);
         
         saveBtn.addEventListener('click', saveContent);
+        saveBtn.addEventListener('mouseenter', showFilenameInput);
+        saveBtn.addEventListener('mouseover', function() {
+            // Reset timer if we're already showing the filename input
+            if (document.getElementById('filename-container').style.display === 'inline-flex') {
+                resetFilenameTimer();
+            }
+        });
+        saveBtn.addEventListener('mouseleave', function() {
+            // Don't hide immediately to allow user to move mouse to the input
+            window.filenameHideTimer = setTimeout(function() {
+                hideFilenameInput();
+            }, 500);
+        });
+        
+        // Add Date button functionality
+        const dateBtn = document.getElementById('date-btn');
+        if (dateBtn) {
+            dateBtn.addEventListener('click', insertDateFormat);
+        }
+        
+        // Add keydown event to document to capture typing when hovering save button
+        document.addEventListener('keydown', function(e) {
+            // Only process if we're hovering over save button and not already focused in an input
+            const filenameContainer = document.getElementById('filename-container');
+            const filenameInput = document.getElementById('filename-input');
+            
+            // Check if save button is being hovered and we're not already in an input field
+            const isHoveringSave = saveBtn.matches(':hover');
+            const isTypingInInput = document.activeElement.tagName === 'INPUT' || 
+                                   document.activeElement.tagName === 'TEXTAREA';
+            
+            if (isHoveringSave && !isTypingInInput) {
+                // If it's a printable character (letters, numbers, symbols)
+                if (e.key.length === 1) {
+                    // Show filename input if not already visible
+                    if (filenameContainer.style.display !== 'inline-flex') {
+                        showFilenameInput();
+                    }
+                    
+                    // Replace default filename if it's still the default
+                    if (filenameInput.value === 'document') {
+                        filenameInput.value = e.key;
+                    } else {
+                        // Otherwise append to existing filename
+                        filenameInput.value += e.key;
+                    }
+                    
+                    // Focus the input to continue typing
+                    filenameInput.focus();
+                    
+                    // Move cursor to end of input
+                    const length = filenameInput.value.length;
+                    filenameInput.setSelectionRange(length, length);
+                    
+                    // Prevent default to avoid the keystroke affecting other elements
+                    e.preventDefault();
+                    
+                    // Reset the timer
+                    resetFilenameTimer();
+                }
+                // Handle backspace to delete characters
+                else if (e.key === 'Backspace') {
+                    // Show filename input if not already visible
+                    if (filenameContainer.style.display !== 'inline-flex') {
+                        showFilenameInput();
+                    }
+                    
+                    // Delete last character
+                    filenameInput.value = filenameInput.value.slice(0, -1);
+                    
+                    // Focus the input to continue typing
+                    filenameInput.focus();
+                    
+                    // Move cursor to end of input
+                    const length = filenameInput.value.length;
+                    filenameInput.setSelectionRange(length, length);
+                    
+                    // Prevent default
+                    e.preventDefault();
+                    
+                    // Reset the timer
+                    resetFilenameTimer();
+                }
+                // Handle Enter key to save
+                else if (e.key === 'Enter') {
+                    saveContent();
+                    e.preventDefault();
+                }
+            }
+        });
+        
+        // Add events for the filename input
+        const filenameContainer = document.getElementById('filename-container');
+        const filenameInput = document.getElementById('filename-input');
+        
+        filenameContainer.addEventListener('mouseenter', function() {
+            // Clear the hide timer when mouse enters the container
+            if (window.filenameHideTimer) {
+                clearTimeout(window.filenameHideTimer);
+            }
+            // Reset the display timer since user is interacting with it
+            resetFilenameTimer();
+        });
+        
+        filenameContainer.addEventListener('mouseleave', function() {
+            // Set timer to hide the container when mouse leaves
+            window.filenameHideTimer = setTimeout(function() {
+                hideFilenameInput();
+            }, 500);
+        });
+        
+        // Reset timer when user focuses on or clicks the input
+        filenameInput.addEventListener('focus', resetFilenameTimer);
+        filenameInput.addEventListener('click', resetFilenameTimer);
+        
+        // Save on Enter key press in filename input
+        filenameInput.addEventListener('keydown', function(e) {
+            resetFilenameTimer(); // Reset timer when typing
+            if (e.key === 'Enter') {
+                saveContent();
+            }
+        });
+        
         loadBtn.addEventListener('click', loadContent);
         fileInput.addEventListener('change', handleFileUpload);
         
@@ -1687,10 +1830,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // Create a Blob with the HTML content
         const blob = new Blob([content], {type: 'text/html'});
         
+        // Get the filename from the input field
+        const filenameInput = document.getElementById('filename-input');
+        let filename = filenameInput.value.trim();
+        
+        // Add .html extension if not present (we're always saving HTML files)
+        if (!filename.toLowerCase().endsWith('.html')) {
+            filename += '.html';
+        }
+        
         // Create a link element to download the file
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'editor-content.html';
+        a.download = filename;
         
         // Trigger the download
         document.body.appendChild(a);
@@ -1699,6 +1851,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Clean up the URL object
         URL.revokeObjectURL(a.href);
+        
+        // Hide the filename input
+        hideFilenameInput();
+        
+        // Also save to localStorage
+        localStorage.setItem('editorContent', content);
     }
     
     // Save current state to history
@@ -2550,6 +2708,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update word count and history
                 updateWordCount();
                 saveHistory();
+                
+                // Save to localStorage
+                localStorage.setItem('editorContent', bodyContent);
+                
+                // Hide the clear all button after loading content
+                const clearAllBtn = document.getElementById('clear-all-btn');
+                if (clearAllBtn) {
+                    clearAllBtn.style.display = 'none';
+                }
                 
                 console.log('Content loaded from file:', file.name);
                 showNotification(`Content loaded successfully from ${file.name}`, 'success');
@@ -3622,6 +3789,150 @@ document.addEventListener('DOMContentLoaded', function() {
             dragHandle.removeEventListener('mousedown', startDragging);
             document.body.removeChild(dragHandle);
             dragHandle = null;
+        }
+    }
+
+    // Show the filename input when hovering over Save button
+    function showFilenameInput() {
+        // Get the filename container and input
+        const filenameContainer = document.getElementById('filename-container');
+        const filenameInput = document.getElementById('filename-input');
+        
+        // Clear any existing timeout
+        if (window.filenameHideTimer) {
+            clearTimeout(window.filenameHideTimer);
+        }
+        
+        // Set a default filename if empty
+        if (!filenameInput.value) {
+            filenameInput.value = 'document';
+        }
+        
+        // Show the container
+        filenameContainer.style.display = 'inline-flex';
+        filenameContainer.style.opacity = '1';
+        
+        // Set a timeout to hide the container after 5 seconds
+        resetFilenameTimer();
+    }
+
+    // Reset the timer for the filename input
+    function resetFilenameTimer() {
+        // Clear any existing timeout
+        if (window.filenameDisplayTimer) {
+            clearTimeout(window.filenameDisplayTimer);
+        }
+        
+        // Set a new timeout
+        window.filenameDisplayTimer = setTimeout(function() {
+            hideFilenameInput();
+        }, 5000);
+    }
+
+    // Hide the filename input
+    function hideFilenameInput() {
+        const filenameContainer = document.getElementById('filename-container');
+        
+        // Don't hide if the input is focused - user is still interacting with it
+        const filenameInput = document.getElementById('filename-input');
+        if (document.activeElement === filenameInput) {
+            resetFilenameTimer();
+            return;
+        }
+        
+        // Add fade out animation
+        filenameContainer.style.animation = 'fadeOutFilename 0.5s forwards';
+        
+        // Hide after animation completes
+        setTimeout(function() {
+            filenameContainer.style.display = 'none';
+            filenameContainer.style.animation = '';
+        }, 500);
+    }
+
+    // Function to insert date format: YYYYMMDD_Filename_HHMMSS
+    function insertDateFormat() {
+        const filenameInput = document.getElementById('filename-input');
+        const originalFilename = filenameInput.value.trim();
+        
+        // Get current date and time
+        const now = new Date();
+        
+        // Format date as YYYYMMDD
+        const datePrefix = now.getFullYear() +
+                         String(now.getMonth() + 1).padStart(2, '0') +
+                         String(now.getDate()).padStart(2, '0');
+        
+        // Format time as HHMMSS
+        const timeSuffix = String(now.getHours()).padStart(2, '0') +
+                          String(now.getMinutes()).padStart(2, '0') +
+                          String(now.getSeconds()).padStart(2, '0');
+        
+        // Combine in the requested format: YYYYMMDD_Filename_HHMMSS
+        const newFilename = `${datePrefix}_${originalFilename}_${timeSuffix}`;
+        
+        // Update the input value
+        filenameInput.value = newFilename;
+        
+        // Focus the input and move cursor to end
+        filenameInput.focus();
+        const length = filenameInput.value.length;
+        filenameInput.setSelectionRange(length, length);
+        
+        // Reset timer
+        resetFilenameTimer();
+    }
+
+    // Function to setup auto-save
+    function setupAutoSave() {
+        // Auto-save content to localStorage when changes are made
+        const saveToLocalStorage = () => {
+            const content = isSourceView ? htmlSource.value : editor.innerHTML;
+            localStorage.setItem('editorContent', content);
+        };
+        
+        // Save content when user types or makes changes
+        editor.addEventListener('input', saveToLocalStorage);
+        htmlSource.addEventListener('input', saveToLocalStorage);
+        
+        // Also save on important editing actions
+        editor.addEventListener('paste', saveToLocalStorage);
+        editor.addEventListener('cut', saveToLocalStorage);
+        
+        // Save before user leaves/refreshes the page
+        window.addEventListener('beforeunload', saveToLocalStorage);
+        
+        // Hide Clear All button once editing begins
+        const clearAllBtn = document.getElementById('clear-all-btn');
+        const hideButtonOnEdit = () => {
+            if (clearAllBtn && clearAllBtn.style.display !== 'none') {
+                clearAllBtn.style.display = 'none';
+            }
+        };
+        
+        editor.addEventListener('input', hideButtonOnEdit);
+        htmlSource.addEventListener('input', hideButtonOnEdit);
+    }
+
+    // Function to clear all content with confirmation
+    function clearAllContent() {
+        if (confirm('Are you sure you want to clear all content? This cannot be undone.')) {
+            // Clear editor content
+            editor.innerHTML = '<p>Start typing your content here...</p>';
+            htmlSource.value = '<p>Start typing your content here...</p>';
+            
+            // Clear localStorage
+            localStorage.removeItem('editorContent');
+            
+            // Reset history
+            editorHistory = [editor.innerHTML];
+            historyIndex = 0;
+            
+            // Update UI
+            updateWordCount();
+            updateUndoRedoButtons();
+            
+            showNotification('All content has been cleared', 'success');
         }
     }
 }); 

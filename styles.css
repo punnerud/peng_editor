@@ -546,6 +546,76 @@ body {
     transform: scale(0.98);
 }
 
+/* Filename container styling */
+.filename-container {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 10px;
+    animation: fadeIn 0.3s ease;
+    vertical-align: middle;
+}
+
+.date-button {
+    padding: 4px 8px;
+    background-color: #e8f0f8;
+    border: 1px solid #ddd;
+    border-radius: 3px 0 0 3px;
+    font-size: 13px;
+    color: #333;
+    cursor: pointer;
+    margin-right: 0;
+    transition: all 0.2s ease;
+}
+
+.date-button:hover {
+    background-color: #d0e1f2;
+    border-color: #aac;
+}
+
+.date-button:active {
+    background-color: #c0d8ef;
+    transform: scale(0.98);
+}
+
+.filename-input {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    border-left: none;
+    font-size: 14px;
+    background-color: #f0f0f0;
+    transition: all 0.2s ease;
+    width: 200px;
+    margin-right: 4px;
+}
+
+.filename-extension {
+    padding: 4px 8px;
+    background-color: transparent;
+    border: none;
+    font-size: 14px;
+    color: #666;
+    user-select: none;
+    font-style: italic;
+}
+
+.filename-input:hover {
+    border-color: #ccc;
+    background-color: #fff;
+}
+
+.filename-input:focus {
+    outline: none;
+    border-color: #4990E2;
+    background-color: #fff;
+    box-shadow: 0 0 4px rgba(73, 144, 226, 0.3);
+}
+
+@keyframes fadeOutFilename {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
 /* Character count alignment */
 .char-count {
     display: flex;
