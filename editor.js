@@ -129,8 +129,7 @@ document.addEventListener('DOMContentLoaded', function() {
             '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏭', '🏢', '🏬', '🏣', '🏤', 
             '🏥', '🏦', '🏨', '🏪', '🏫', '🏩', '💒', '🏛️', '⛪', '🕌', 
             '🕍', '🛕', '🕋', '⛩️', '🛤️', '🛣️', '🗾', '🎑', '🏞️', '🌅', 
-            '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙️', '🌃', '🌌', '🌉', 
-            '🌁'
+            '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙️', '🌃', '🌌', '🌉'
         ],
         activities: [
             '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', 
@@ -226,6 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let dragHandle = null;
     let isDragging = false;
     let draggedText = '';
+    let draggedHtml = ''; // Store formatted HTML content
     let draggedTextElement = null;
     let initialMousePosition = { x: 0, y: 0 };
     let initialSelectionPosition = { x: 0, y: 0 };
@@ -527,11 +527,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
         
-        // Selection change event to update toolbar and show drag handle
-        document.addEventListener('selectionchange', function() {
-            updateToolbar();
-            handleTextSelection();
-        });
+        // The selectionchange event is already handled earlier in this function
+        // No duplicate listener needed here
     }
     
     // Execute command
@@ -2068,12 +2065,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.combinedPipetteStyles.color = newStyles.color;
             }
             
-            // Remove the redundant background color setting since we already set it explicitly above
-            // if (newStyles.backgroundColor && newStyles.backgroundColor !== 'rgba(0, 0, 0, 0)' && 
-            //     newStyles.backgroundColor !== 'transparent') {
-            //     window.combinedPipetteStyles.backgroundColor = newStyles.backgroundColor;
-            // }
-            
             if (newStyles.textAlign && newStyles.textAlign !== 'inherit') {
                 window.combinedPipetteStyles.textAlign = newStyles.textAlign;
             }
@@ -3054,6 +3045,30 @@ document.addEventListener('DOMContentLoaded', function() {
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         
+        // Store the HTML content to preserve formatting
+        const fragment = range.cloneContents();
+        const tempDiv = document.createElement('div');
+        tempDiv.appendChild(fragment);
+        
+        // Store the formatted HTML
+        draggedHtml = tempDiv.innerHTML;
+        
+        // Check if we need to wrap the content to preserve parent element formatting
+        // For example when the entire selection has the same formatting
+        const commonAncestor = range.commonAncestorContainer;
+        if (commonAncestor.nodeType === Node.TEXT_NODE) {
+            // If the selection is inside a single text node, we need to get the parent's formatting
+            const parentElement = commonAncestor.parentNode;
+            if (parentElement && parentElement !== editor) {
+                // Create a clone of the parent element to capture its style
+                const clonedParent = parentElement.cloneNode(false);
+                // Add the dragged HTML inside this parent
+                clonedParent.innerHTML = draggedHtml;
+                // Use this as our dragged HTML to preserve the formatting
+                draggedHtml = clonedParent.outerHTML;
+            }
+        }
+        
         // Create an element to show while dragging
         draggedTextElement = document.createElement('div');
         draggedTextElement.className = 'dragging-selection';
@@ -3123,33 +3138,98 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create a temporary range to show where text would be inserted
             const tempRange = document.createRange();
             
-            // Determine insertion point based on element type
-            if (targetElement.nodeType === Node.TEXT_NODE) {
-                // For text nodes, find the closest position
-                const offset = calculateOffsetInTextNode(targetElement, event.clientX, event.clientY);
-                tempRange.setStart(targetElement, offset);
+            // Check if we're below the last line of content
+            const editorRect = editorElement.getBoundingClientRect();
+            const allTextNodes = getAllTextNodesIn(editorElement);
+            let belowLastLine = false;
+            let atEndOfLastLine = false;
+            
+            if (allTextNodes.length > 0) {
+                // Get the last text node
+                const lastTextNode = allTextNodes[allTextNodes.length - 1];
+                if (lastTextNode) {
+                    const lastRange = document.createRange();
+                    lastRange.selectNode(lastTextNode);
+                    const lastLineRect = lastRange.getBoundingClientRect();
+                    
+                    // Check if we're below the last line
+                    if (event.clientY > lastLineRect.bottom) {
+                        belowLastLine = true;
+                    }
+                    
+                    // Check if we're at the end of the last line
+                    if (event.clientY >= lastLineRect.top && 
+                        event.clientY <= lastLineRect.bottom && 
+                        event.clientX > lastLineRect.right - 10) {  // Some margin for detection
+                        atEndOfLastLine = true;
+                    }
+                }
+            }
+            
+            // Handle positioning based on context
+            if (belowLastLine) {
+                // We're below the last line, set cursor to create a new line
+                const lastParagraph = findLastBlock(editorElement);
+                if (lastParagraph) {
+                    // Position at the end of the last block
+                    tempRange.selectNodeContents(lastParagraph);
+                    tempRange.collapse(false); // Collapse to end
+                    
+                    // Store info for later use during actual insertion
+                    tempRange.setAttribute = function(name, value) {
+                        this[name] = value;
+                    };
+                    tempRange.setAttribute('addNewLine', true);
+                }
+            } else if (atEndOfLastLine) {
+                // We're at the end of the last line
+                const lastTextNode = allTextNodes[allTextNodes.length - 1];
+                tempRange.setStart(lastTextNode, lastTextNode.length);
                 tempRange.collapse(true);
-            } else if (targetElement.childNodes.length > 0) {
-                // For element nodes with children
-                const childNode = findClosestChildNode(targetElement, event.clientX, event.clientY);
-                if (childNode) {
-                    if (childNode.nodeType === Node.TEXT_NODE) {
-                        const offset = calculateOffsetInTextNode(childNode, event.clientX, event.clientY);
-                        tempRange.setStart(childNode, offset);
-                        tempRange.collapse(true);
+                
+                // Store info for later use
+                tempRange.setAttribute = function(name, value) {
+                    this[name] = value;
+                };
+                tempRange.setAttribute('atEndOfLine', true);
+            } else {
+                // Normal positioning logic
+                if (targetElement.nodeType === Node.TEXT_NODE) {
+                    // For text nodes, find the closest position
+                    const offset = calculateOffsetInTextNode(targetElement, event.clientX, event.clientY);
+                    tempRange.setStart(targetElement, offset);
+                    tempRange.collapse(true);
+                    
+                    // Check if we're at the end of a line
+                    const textRect = tempRange.getBoundingClientRect();
+                    if (Math.abs(textRect.right - event.clientX) < 10) {
+                        tempRange.setAttribute = function(name, value) {
+                            this[name] = value;
+                        };
+                        tempRange.setAttribute('atEndOfLine', true);
+                    }
+                } else if (targetElement.childNodes.length > 0) {
+                    // For element nodes with children
+                    const childNode = findClosestChildNode(targetElement, event.clientX, event.clientY);
+                    if (childNode) {
+                        if (childNode.nodeType === Node.TEXT_NODE) {
+                            const offset = calculateOffsetInTextNode(childNode, event.clientX, event.clientY);
+                            tempRange.setStart(childNode, offset);
+                            tempRange.collapse(true);
+                        } else {
+                            tempRange.setStartBefore(childNode);
+                            tempRange.collapse(true);
+                        }
                     } else {
-                        tempRange.setStartBefore(childNode);
+                        // If no suitable child, append to element
+                        tempRange.setStart(targetElement, targetElement.childNodes.length);
                         tempRange.collapse(true);
                     }
                 } else {
-                    // If no suitable child, append to element
-                    tempRange.setStart(targetElement, targetElement.childNodes.length);
+                    // For empty elements
+                    tempRange.setStart(targetElement, 0);
                     tempRange.collapse(true);
                 }
-            } else {
-                // For empty elements
-                tempRange.setStart(targetElement, 0);
-                tempRange.collapse(true);
             }
             
             // Create and position drop indicator
@@ -3175,7 +3255,56 @@ document.addEventListener('DOMContentLoaded', function() {
             indicator.style.left = rect.left + 'px';
             indicator.style.top = rect.top + 'px';
             indicator.style.height = rect.height + 'px';
+            
+            // For end of line or new line positions, use a special style
+            if (range.addNewLine || range.atEndOfLine) {
+                indicator.classList.add('text-drop-indicator-special');
+            }
         }
+    }
+
+    // Function to get all text nodes within an element
+    function getAllTextNodesIn(element) {
+        const textNodes = [];
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            { acceptNode: function(node) { return NodeFilter.FILTER_ACCEPT; } },
+            false
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {
+            if (node.nodeValue.trim() !== '') {
+                textNodes.push(node);
+            }
+        }
+        
+        return textNodes;
+    }
+
+    // Function to find the last block element in the editor
+    function findLastBlock(element) {
+        // Common block elements in rich text editor
+        const blockTags = ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE'];
+        let lastBlock = null;
+        
+        // Find all direct children that are block elements
+        const blocks = Array.from(element.querySelectorAll(blockTags.join(',')));
+        
+        // Get the last one that's a direct child
+        if (blocks.length > 0) {
+            // Sort by document position to ensure we get the last one
+            blocks.sort((a, b) => {
+                const position = a.compareDocumentPosition(b);
+                return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+            });
+            
+            lastBlock = blocks[blocks.length - 1];
+        }
+        
+        // If no blocks found, use the editor itself
+        return lastBlock || element;
     }
 
     // Function to remove drop indicator
@@ -3226,28 +3355,95 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create a new range at the drop position
             const dropRange = document.createRange();
             
-            // Set the range based on the drop target
-            if (targetElement.nodeType === Node.TEXT_NODE) {
-                // For text nodes, find the closest position in the text
-                const offset = calculateOffsetInTextNode(targetElement, event.clientX, event.clientY);
-                dropRange.setStart(targetElement, offset);
-            } else if (targetElement.childNodes.length > 0) {
-                // For element nodes with children, try to find the best insertion point
-                const childNode = findClosestChildNode(targetElement, event.clientX, event.clientY);
-                if (childNode) {
-                    if (childNode.nodeType === Node.TEXT_NODE) {
-                        const offset = calculateOffsetInTextNode(childNode, event.clientX, event.clientY);
-                        dropRange.setStart(childNode, offset);
+            // Check for special positioning cases
+            const allTextNodes = getAllTextNodesIn(editorElement);
+            let belowLastLine = false;
+            let atEndOfLine = false;
+            let needsSpace = false;
+            
+            // Check if we're below the last line of content
+            if (allTextNodes.length > 0) {
+                // Get the last text node
+                const lastTextNode = allTextNodes[allTextNodes.length - 1];
+                if (lastTextNode) {
+                    const lastRange = document.createRange();
+                    lastRange.selectNode(lastTextNode);
+                    const lastLineRect = lastRange.getBoundingClientRect();
+                    
+                    // Below the last line
+                    if (event.clientY > lastLineRect.bottom) {
+                        belowLastLine = true;
+                        
+                        // Find the last block element
+                        const lastBlock = findLastBlock(editorElement);
+                        
+                        // Set drop range to the end of the last block
+                        if (lastBlock) {
+                            dropRange.selectNodeContents(lastBlock);
+                            dropRange.collapse(false);
+                        }
+                    }
+                    // At the end of the last line
+                    else if (event.clientY >= lastLineRect.top && 
+                             event.clientY <= lastLineRect.bottom && 
+                             event.clientX > lastLineRect.right - 10) {
+                        atEndOfLine = true;
+                        dropRange.setStart(lastTextNode, lastTextNode.length);
+                        dropRange.collapse(true);
+                        
+                        // Check if we need to add a space
+                        if (lastTextNode.nodeValue.length > 0 && 
+                            lastTextNode.nodeValue[lastTextNode.length - 1] !== ' ' && 
+                            draggedText.charAt(0) !== ' ') {
+                            needsSpace = true;
+                        }
+                    }
+                }
+            }
+            
+            // If not at a special position, use standard logic
+            if (!belowLastLine && !atEndOfLine) {
+                // Set the range based on the drop target
+                if (targetElement.nodeType === Node.TEXT_NODE) {
+                    // For text nodes, find the closest position
+                    const offset = calculateOffsetInTextNode(targetElement, event.clientX, event.clientY);
+                    dropRange.setStart(targetElement, offset);
+                    
+                    // Check if we're at the end of a line
+                    const tempRange = document.createRange();
+                    tempRange.setStart(targetElement, offset);
+                    tempRange.collapse(true);
+                    const rect = tempRange.getBoundingClientRect();
+                    
+                    if (Math.abs(rect.right - event.clientX) < 10 && 
+                        offset === targetElement.length) {
+                        atEndOfLine = true;
+                        
+                        // Check if we need to add a space
+                        if (targetElement.nodeValue.length > 0 && 
+                            targetElement.nodeValue[offset - 1] !== ' ' && 
+                            draggedText.charAt(0) !== ' ') {
+                            needsSpace = true;
+                        }
+                    }
+                } else if (targetElement.childNodes.length > 0) {
+                    // For element nodes with children, try to find the best insertion point
+                    const childNode = findClosestChildNode(targetElement, event.clientX, event.clientY);
+                    if (childNode) {
+                        if (childNode.nodeType === Node.TEXT_NODE) {
+                            const offset = calculateOffsetInTextNode(childNode, event.clientX, event.clientY);
+                            dropRange.setStart(childNode, offset);
+                        } else {
+                            dropRange.setStartBefore(childNode);
+                        }
                     } else {
-                        dropRange.setStartBefore(childNode);
+                        // If no suitable child found, append to the element
+                        dropRange.setStart(targetElement, targetElement.childNodes.length);
                     }
                 } else {
-                    // If no suitable child found, append to the element
-                    dropRange.setStart(targetElement, targetElement.childNodes.length);
+                    // For empty elements, just set to position 0
+                    dropRange.setStart(targetElement, 0);
                 }
-            } else {
-                // For empty elements, just set to position 0
-                dropRange.setStart(targetElement, 0);
             }
             
             // Collapse the range to insertion point
@@ -3257,8 +3453,30 @@ document.addEventListener('DOMContentLoaded', function() {
             selection.removeAllRanges();
             selection.addRange(dropRange);
             
-            // Store the text we're moving
-            const textToMove = draggedText;
+            // Determine if we should use HTML or plain text insertion
+            let useHtmlInsertion = true;
+            
+            // Plain text is better in some cases: new line and when adding spaces
+            if (belowLastLine || needsSpace) {
+                useHtmlInsertion = false;
+            }
+            
+            // Prepare text with any necessary adjustments
+            let textToMove = useHtmlInsertion ? draggedHtml : draggedText;
+            
+            // If we need to add a space
+            if (needsSpace) {
+                textToMove = ' ' + textToMove;
+            }
+            
+            // If below the last line, add a newline first
+            if (belowLastLine) {
+                textToMove = '\n' + textToMove;
+            }
+            
+            // Determine if we should add space or newline
+            let needToAddSpace = needsSpace;
+            let needToAddNewline = belowLastLine;
             
             // Return to the original selection to delete it
             selection.removeAllRanges();
@@ -3271,8 +3489,18 @@ document.addEventListener('DOMContentLoaded', function() {
             selection.removeAllRanges();
             selection.addRange(dropRange);
             
-            // Insert the text at the new position
-            document.execCommand('insertText', false, textToMove);
+            // Insert space if needed
+            if (needToAddSpace) {
+                document.execCommand('insertText', false, ' ');
+            }
+            
+            // Insert newline if needed
+            if (needToAddNewline) {
+                document.execCommand('insertText', false, '\n');
+            }
+            
+            // Always insert with formatting preserved
+            document.execCommand('insertHTML', false, draggedHtml);
             
             // Save history and update word count
             saveHistory();

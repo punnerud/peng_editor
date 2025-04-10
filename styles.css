@@ -598,6 +598,19 @@ body {
     pointer-events: none;
 }
 
+/* Special indicator for end-of-line or new-line placement */
+.text-drop-indicator-special {
+    width: 8px;
+    background-color: #4990E2;
+    animation: specialPulse 1s infinite;
+}
+
+@keyframes specialPulse {
+    0% { opacity: 1; width: 8px; }
+    50% { opacity: 0.7; width: 5px; }
+    100% { opacity: 1; width: 8px; }
+}
+
 @keyframes pulse {
     0% { opacity: 1; }
     50% { opacity: 0.5; }
