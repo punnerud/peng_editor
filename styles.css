@@ -49,8 +49,9 @@ body {
     display: flex;
     gap: 2px;
     align-items: center;
-    padding: 0 5px;
+    padding: 4px 5px;
     border-right: 1px solid #ddd;
+    min-height: 44px;
 }
 
 .toolbar-group:last-child {
@@ -61,10 +62,14 @@ body {
     background: #fff;
     border: 1px solid #ddd;
     border-radius: 3px;
-    padding: 5px 10px;
+    padding: 8px 10px;
     cursor: pointer;
     font-size: 14px;
     transition: all 0.2s;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .toolbar button:hover {
@@ -78,7 +83,7 @@ body {
 }
 
 .toolbar select, .toolbar input {
-    height: 30px;
+    height: 36px;
     border: 1px solid #ddd;
     border-radius: 3px;
     background-color: #fff;
@@ -86,9 +91,9 @@ body {
 }
 
 .toolbar input[type="color"] {
-    width: 30px;
-    height: 30px;
-    padding: 0;
+    width: 36px;
+    height: 36px;
+    padding: 2px;
     border: 1px solid #ddd;
     background: #fff;
     cursor: pointer;
@@ -97,9 +102,13 @@ body {
 /* Editor Main Area */
 .editor-main {
     position: relative;
-    background: #fff;
+    background: #f8f8f8;
     border-radius: 0 0 5px 5px;
     min-height: 300px;
+    display: flex;
+    justify-content: center;
+    padding: 0 35px;
+    width: 100%;
 }
 
 #editor {
@@ -109,6 +118,14 @@ body {
     overflow-y: auto;
     background-color: #fff;
     border: none;
+    width: 100%;
+    max-width: 210mm; /* Default to A4 width */
+    margin: 0;
+}
+
+/* Remove max-width when no width limit is selected */
+#editor.no-width-limit {
+    max-width: none;
 }
 
 #html-source {
@@ -838,6 +855,21 @@ body {
     height: 16px;
 }
 
+.setting-item select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+.setting-item select:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
 #save-settings-btn {
     background-color: #4CAF50;
     color: white;
@@ -857,6 +889,8 @@ body {
 .editor-with-line-numbers {
     position: relative;
     padding-left: 40px !important;
+    padding-right: 40px !important;
+    background-color: #f8f8f8;
 }
 
 .line-numbers {
@@ -874,6 +908,18 @@ body {
     user-select: none;
     overflow: hidden;
     z-index: 1;
+}
+
+/* Add right side line numbers background */
+.editor-with-line-numbers::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 35px;
+    height: 100%;
+    background-color: #f8f8f8;
+    border-left: 1px solid #ddd;
 }
 
 .line-number {

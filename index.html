@@ -46,6 +46,7 @@
                     <button id="outdent-btn" title="Outdent"><i class="fas fa-outdent"></i></button>
                 </div>
                 <div class="toolbar-group">
+                    <button id="print-btn" title="Print"><i class="fas fa-print"></i></button>
                     <button id="link-btn" title="Insert Link"><i class="fas fa-link"></i></button>
                     <button id="image-btn" title="Insert Image"><i class="fas fa-image"></i></button>
                     <button id="table-btn" title="Insert Table"><i class="fas fa-table"></i></button>
@@ -249,6 +250,15 @@
                             <input type="checkbox" id="setting-show-line-numbers">
                             Show line numbers
                         </label>
+                    </div>
+
+                    <div class="setting-item">
+                        <label for="setting-page-width">Page Width:</label>
+                        <select id="setting-page-width">
+                            <option value="a4">A4 (210mm)</option>
+                            <option value="letter">Letter (216mm)</option>
+                            <option value="none">No width limit</option>
+                        </select>
                     </div>
                 </div>
                 

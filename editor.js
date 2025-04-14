@@ -4271,7 +4271,8 @@ document.addEventListener('DOMContentLoaded', function() {
             autoDate: false,
             showWords: true,
             showChars: true,
-            showLineNumbers: false
+            showLineNumbers: false,
+            pageWidth: 'a4' // Default to A4
         };
         
         // Apply settings to UI
@@ -4279,6 +4280,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('setting-show-words').checked = settings.showWords;
         document.getElementById('setting-show-chars').checked = settings.showChars;
         document.getElementById('setting-show-line-numbers').checked = settings.showLineNumbers;
+        document.getElementById('setting-page-width').value = settings.pageWidth;
         
         // Apply settings to editor
         applySettings(settings);
@@ -4296,6 +4298,18 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Show/hide line numbers
         toggleLineNumbers(settings.showLineNumbers);
+
+        // Apply page width
+        const editor = document.getElementById('editor');
+        if (editor) {
+            if (settings.pageWidth === 'none') {
+                editor.classList.add('no-width-limit');
+                editor.style.maxWidth = 'none';
+            } else {
+                editor.classList.remove('no-width-limit');
+                editor.style.maxWidth = '210mm'; // Use A4 width for both A4 and Letter
+            }
+        }
     }
 
     // Save settings to localStorage
@@ -4304,7 +4318,8 @@ document.addEventListener('DOMContentLoaded', function() {
             autoDate: document.getElementById('setting-auto-date').checked,
             showWords: document.getElementById('setting-show-words').checked,
             showChars: document.getElementById('setting-show-chars').checked,
-            showLineNumbers: document.getElementById('setting-show-line-numbers').checked
+            showLineNumbers: document.getElementById('setting-show-line-numbers').checked,
+            pageWidth: document.getElementById('setting-page-width').value
         };
         
         // Save to localStorage
