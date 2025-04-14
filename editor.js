@@ -299,6 +299,16 @@ document.addEventListener('DOMContentLoaded', function() {
     let initialMousePosition = { x: 0, y: 0 };
     let initialSelectionPosition = { x: 0, y: 0 };
     
+    // Add after editor state variables
+    let activeImage = null;
+    let imageToolbar = null;
+    
+    // Add after editor state variables
+    let hideHandlesTimeout = null;
+    
+    // Add after editor state variables
+    let activeImageDragHandler = null;
+    
     // Initialize editor
     initEditor();
     
@@ -764,6 +774,11 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Load settings from localStorage 
         loadSettings();
+        
+        // Add image click handler
+        editor.addEventListener('click', handleImageClick);
+        editor.addEventListener('scroll', updateImageToolbarPosition);
+        window.addEventListener('resize', updateImageToolbarPosition);
     }
     
     // Execute command
@@ -809,6 +824,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (bgErr) {
                     console.log('Additional background color handling failed:', bgErr);
                 }
+            } else if (command.startsWith('justify') && activeImage) {
+                const wrapper = activeImage.closest('.image-wrapper');
+                if (wrapper && !wrapper.classList.contains('absolute')) {
+                    const alignment = command.replace('justify', '').toLowerCase();
+                    wrapper.style.textAlign = alignment;
+                    wrapper.style.float = '';
+                    wrapper.style.margin = '1em 0';
+                    
+                    // Update alignment buttons state
+                    updateAlignmentButtonsState();
+                    saveHistory();
+                    return;
+                }
             } else {
                 // Normal command execution for everything else
                 document.execCommand(command, showUI, value);
@@ -817,15 +845,15 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Immediately update the toolbar state to reflect changes
             updateToolbarState();
+            
+            // Save history
+            saveHistory();
         } catch (err) {
             console.error(`Error executing command ${command}:`, err);
         }
         
         // Ensure focus is maintained
         editor.focus();
-        
-        // Save history
-        saveHistory();
     }
     
     // Update toolbar state based on current selection
@@ -4479,5 +4507,894 @@ document.addEventListener('DOMContentLoaded', function() {
                 lineNumber.style.padding = '3px 0';
             }
         });
+    }
+
+    // Handle image click
+    function handleImageClick(e) {
+        const clickedImage = e.target.closest('img');
+        
+        // Remove active state from previous image
+        if (activeImage && activeImage !== clickedImage) {
+            const prevWrapper = activeImage.closest('.image-wrapper');
+            if (prevWrapper) {
+                const prevHandles = prevWrapper.querySelector('.resize-handles-container');
+                if (prevHandles) prevHandles.remove();
+            }
+            const prevToolbar = document.querySelector('.toolbar-group.image-editing');
+            if (prevToolbar) prevToolbar.remove();
+        }
+        
+        // If clicking outside an image
+        if (!clickedImage) {
+            const toolbar = document.querySelector('.toolbar-group.image-editing');
+            if (toolbar) toolbar.remove();
+            const handles = document.querySelectorAll('.resize-handles-container');
+            handles.forEach(h => h.remove());
+            activeImage = null;
+            
+            // Reset alignment button handlers to default
+            justifyLeftBtn.onclick = () => execCommand('justifyLeft');
+            justifyCenterBtn.onclick = () => execCommand('justifyCenter');
+            justifyRightBtn.onclick = () => execCommand('justifyRight');
+            justifyFullBtn.onclick = () => execCommand('justifyFull');
+            return;
+        }
+        
+        // If clicking the same image, keep toolbar and handles
+        if (clickedImage === activeImage) {
+            showHandles(); // Make sure handles are visible
+            return;
+        }
+        
+        // Set active image and create toolbar
+        activeImage = clickedImage;
+        createImageToolbar();
+        showHandles(); // Show handles immediately when clicking image
+        
+        // Override alignment button handlers for image alignment
+        justifyLeftBtn.onclick = () => alignImage('left');
+        justifyCenterBtn.onclick = () => alignImage('center');
+        justifyRightBtn.onclick = () => alignImage('right');
+        justifyFullBtn.onclick = () => alignImage('left'); // Default to left for justify full
+        
+        // Update alignment buttons state based on current image alignment
+        updateAlignmentButtonsState();
+    }
+
+    // Create image toolbar
+    function createImageToolbar() {
+        if (!activeImage) return;
+        
+        // Remove any existing image-specific toolbar buttons
+        const existingGroup = document.querySelector('.toolbar-group.image-editing');
+        if (existingGroup) {
+            existingGroup.remove();
+        }
+        
+        // Create a new toolbar group for image editing
+        const toolbarGroup = document.createElement('div');
+        toolbarGroup.className = 'toolbar-group image-editing active';
+        toolbarGroup.style.backgroundColor = '#d0e1ff'; // Darker blue background
+        toolbarGroup.style.padding = '4px 8px';
+        toolbarGroup.style.borderRadius = '4px';
+        toolbarGroup.style.margin = '0 4px';
+        toolbarGroup.style.border = '1px solid #a8c6ff'; // Darker blue border
+        
+        // Add toolbar buttons
+        const buttons = [
+            { icon: 'fa-arrows-alt', title: 'Resize', action: startImageResize },
+            { icon: 'fa-crop', title: 'Crop', action: startImageCrop },
+            { icon: 'fa-object-group', title: 'Adjust Size', action: showSizeDialog },
+            { 
+                icon: 'fa-expand', 
+                title: 'Float Freely', 
+                action: toggleFloating,
+                id: 'float-btn'
+            },
+            { icon: 'fa-trash', title: 'Delete', action: deleteImage }
+        ];
+        
+        buttons.forEach(btn => {
+            const button = document.createElement('button');
+            button.className = 'toolbar-btn';
+            if (btn.id) button.id = btn.id;
+            button.innerHTML = `<i class="fas ${btn.icon}"></i>`;
+            button.title = btn.title;
+            button.addEventListener('click', btn.action);
+            
+            // If it's the float button, check if image is currently floating
+            if (btn.id === 'float-btn' && activeImage.closest('.image-wrapper.absolute')) {
+                button.classList.add('active');
+            }
+            
+            toolbarGroup.appendChild(button);
+        });
+        
+        // Add the toolbar group after the first group
+        const toolbar = document.querySelector('.toolbar');
+        const firstGroup = toolbar.querySelector('.toolbar-group');
+        firstGroup.parentNode.insertBefore(toolbarGroup, firstGroup.nextSibling);
+        
+        // Add resize handles directly to the image
+        addResizeHandlesToImage();
+        
+        // Update the state of alignment buttons based on current image alignment
+        updateAlignmentButtonsState();
+    }
+
+    // Add new function to add resize handles to image
+    function addResizeHandlesToImage() {
+        if (!activeImage) return;
+        
+        // Remove any existing handles
+        const existingHandles = document.querySelectorAll('.resize-handles-container');
+        existingHandles.forEach(handle => handle.remove());
+        
+        // Create container for handles
+        const handleContainer = document.createElement('div');
+        handleContainer.className = 'resize-handles-container';
+        handleContainer.style.position = 'absolute';
+        handleContainer.style.top = '0';
+        handleContainer.style.left = '0';
+        handleContainer.style.width = '100%';
+        handleContainer.style.height = '100%';
+        handleContainer.style.pointerEvents = 'none'; // Allow clicks to pass through container
+        
+        // Add resize handles
+        const handles = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+        handles.forEach(pos => {
+            const handle = document.createElement('div');
+            handle.className = `resize-handle ${pos}`;
+            handle.dataset.handle = pos;
+            handle.style.display = 'block';
+            handle.style.opacity = '1';
+            handle.style.position = 'absolute';
+            handle.style.width = '10px';
+            handle.style.height = '10px';
+            handle.style.backgroundColor = '#fff';
+            handle.style.border = '1px solid #0066cc';
+            handle.style.pointerEvents = 'auto'; // Make handles clickable
+            
+            // Position handles
+            switch(pos) {
+                case 'nw':
+                    handle.style.top = '-5px';
+                    handle.style.left = '-5px';
+                    handle.style.cursor = 'nw-resize';
+                    break;
+                case 'n':
+                    handle.style.top = '-5px';
+                    handle.style.left = '50%';
+                    handle.style.transform = 'translateX(-50%)';
+                    handle.style.cursor = 'n-resize';
+                    break;
+                case 'ne':
+                    handle.style.top = '-5px';
+                    handle.style.right = '-5px';
+                    handle.style.cursor = 'ne-resize';
+                    break;
+                case 'w':
+                    handle.style.top = '50%';
+                    handle.style.left = '-5px';
+                    handle.style.transform = 'translateY(-50%)';
+                    handle.style.cursor = 'w-resize';
+                    break;
+                case 'e':
+                    handle.style.top = '50%';
+                    handle.style.right = '-5px';
+                    handle.style.transform = 'translateY(-50%)';
+                    handle.style.cursor = 'e-resize';
+                    break;
+                case 'sw':
+                    handle.style.bottom = '-5px';
+                    handle.style.left = '-5px';
+                    handle.style.cursor = 'sw-resize';
+                    break;
+                case 's':
+                    handle.style.bottom = '-5px';
+                    handle.style.left = '50%';
+                    handle.style.transform = 'translateX(-50%)';
+                    handle.style.cursor = 's-resize';
+                    break;
+                case 'se':
+                    handle.style.bottom = '-5px';
+                    handle.style.right = '-5px';
+                    handle.style.cursor = 'se-resize';
+                    break;
+            }
+            
+            handleContainer.appendChild(handle);
+        });
+        
+        // Create a wrapper for the image if it doesn't exist
+        let wrapper = activeImage.closest('.image-wrapper');
+        if (!wrapper) {
+            wrapper = document.createElement('div');
+            wrapper.className = 'image-wrapper';
+            wrapper.style.position = 'relative';
+            wrapper.style.display = 'inline-block';
+            activeImage.parentNode.insertBefore(wrapper, activeImage);
+            wrapper.appendChild(activeImage);
+        }
+        
+        // Ensure wrapper has correct positioning
+        if (window.getComputedStyle(wrapper).position === 'static') {
+            wrapper.style.position = 'relative';
+        }
+        
+        wrapper.appendChild(handleContainer);
+        
+        // Add hover events to wrapper
+        wrapper.addEventListener('mouseenter', showHandles);
+        wrapper.addEventListener('mouseleave', hideHandlesWithDelay);
+        
+        setupResizeHandles(handleContainer);
+    }
+
+    // Update toolbar position
+    function updateImageToolbarPosition() {
+        if (!imageToolbar || !activeImage) return;
+        
+        const rect = activeImage.getBoundingClientRect();
+        const editorRect = editor.getBoundingClientRect();
+        
+        // Position toolbar above image
+        imageToolbar.style.top = `${rect.top - editorRect.top - 40}px`;
+        imageToolbar.style.left = `${rect.left - editorRect.left}px`;
+        imageToolbar.style.width = `${rect.width}px`;
+        
+        // Position resize handles
+        const handles = imageToolbar.querySelectorAll('.resize-handle');
+        handles.forEach(handle => {
+            const pos = handle.dataset.handle;
+            switch(pos) {
+                case 'nw': handle.style.top = '-5px'; handle.style.left = '-5px'; break;
+                case 'n': handle.style.top = '-5px'; handle.style.left = '50%'; break;
+                case 'ne': handle.style.top = '-5px'; handle.style.right = '-5px'; break;
+                case 'w': handle.style.top = '50%'; handle.style.left = '-5px'; break;
+                case 'e': handle.style.top = '50%'; handle.style.right = '-5px'; break;
+                case 'sw': handle.style.bottom = '-5px'; handle.style.left = '-5px'; break;
+                case 's': handle.style.bottom = '-5px'; handle.style.left = '50%'; break;
+                case 'se': handle.style.bottom = '-5px'; handle.style.right = '-5px'; break;
+            }
+        });
+    }
+
+    // Remove image toolbar
+    function removeImageToolbar() {
+        if (imageToolbar) {
+            imageToolbar.remove();
+            imageToolbar = null;
+        }
+    }
+
+    // Image actions
+    function startImageResize(e) {
+        e.stopPropagation();
+        const wrapper = activeImage.closest('.image-wrapper');
+        if (wrapper) {
+            const handles = wrapper.querySelectorAll('.resize-handle');
+            handles.forEach(handle => {
+                handle.style.display = 'block';
+                handle.style.opacity = '1';
+            });
+
+            // Clear any existing timeout
+            if (hideHandlesTimeout) {
+                clearTimeout(hideHandlesTimeout);
+            }
+
+            // Set a longer timeout when clicking the resize button
+            hideHandlesTimeout = setTimeout(() => {
+                handles.forEach(handle => {
+                    handle.style.opacity = '0';
+                    setTimeout(() => {
+                        if (handle.style.opacity === '0') {
+                            handle.style.display = 'none';
+                        }
+                    }, 200);
+                });
+                hideHandlesTimeout = null;
+            }, 5000); // 5 seconds timeout
+        }
+    }
+
+    // Replace the setupResizeHandles function with this updated version
+    function setupResizeHandles(handleContainer) {
+        if (!handleContainer) return;
+        
+        let isResizing = false;
+        let startX, startY, startWidth, startHeight;
+        let activeHandle = null;
+        
+        const handles = handleContainer.querySelectorAll('.resize-handle');
+        handles.forEach(handle => {
+            handle.addEventListener('mousedown', (e) => startResize(e, handle));
+        });
+        
+        function startResize(e, handle) {
+            if (!activeImage) return;
+            
+            // Clear any hide timeout when starting resize
+            if (hideHandlesTimeout) {
+                clearTimeout(hideHandlesTimeout);
+                hideHandlesTimeout = null;
+            }
+            
+            isResizing = true;
+            activeHandle = handle;
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = activeImage.offsetWidth;
+            startHeight = activeImage.offsetHeight;
+            
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', stopResize);
+            e.preventDefault();
+        }
+        
+        function resize(e) {
+            if (!isResizing || !activeImage || !activeHandle) return;
+            
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            
+            const handlePos = activeHandle.dataset.handle;
+            const aspectRatio = startWidth / startHeight;
+            
+            let newWidth = startWidth;
+            let newHeight = startHeight;
+            
+            // Calculate initial dimensions based on handle position
+            if (handlePos.includes('e')) newWidth = startWidth + dx;
+            if (handlePos.includes('w')) newWidth = startWidth - dx;
+            if (handlePos.includes('s')) newHeight = startHeight + dy;
+            if (handlePos.includes('n')) newHeight = startHeight - dy;
+            
+            // By default maintain aspect ratio, unless Shift is held
+            if (!e.shiftKey) {
+                // If it's a corner handle, use the larger change to determine the size
+                if (handlePos.includes('n') || handlePos.includes('s')) {
+                    // Vertical handles prioritize height change
+                    newWidth = newHeight * aspectRatio;
+                } else {
+                    // Horizontal handles prioritize width change
+                    newHeight = newWidth / aspectRatio;
+                }
+            }
+            
+            // Apply minimum size constraints
+            newWidth = Math.max(50, newWidth);
+            newHeight = Math.max(50, newHeight);
+            
+            activeImage.style.width = `${newWidth}px`;
+            activeImage.style.height = `${newHeight}px`;
+        }
+        
+        function stopResize() {
+            if (isResizing) {
+                isResizing = false;
+                activeHandle = null;
+                document.removeEventListener('mousemove', resize);
+                document.removeEventListener('mouseup', stopResize);
+                saveHistory();
+            }
+        }
+    }
+
+    function startImageCrop(e) {
+        e.stopPropagation();
+        if (!activeImage) return;
+
+        // Store reference to the image being cropped
+        const imageBeingCropped = activeImage;
+
+        // Get image dimensions and position
+        const wrapper = imageBeingCropped.closest('.image-wrapper');
+        if (!wrapper) return;
+
+        const imageRect = imageBeingCropped.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+
+        // Create crop overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'crop-overlay';
+        overlay.style.display = 'block';
+        
+        // Position overlay relative to the actual image position
+        overlay.style.position = 'absolute';
+        overlay.style.left = (imageRect.left - wrapperRect.left) + 'px';
+        overlay.style.top = (imageRect.top - wrapperRect.top) + 'px';
+        overlay.style.width = imageRect.width + 'px';
+        overlay.style.height = imageRect.height + 'px';
+
+        // Create crop area
+        const cropArea = document.createElement('div');
+        cropArea.className = 'crop-area';
+
+        // Set initial crop area size (75% of image size)
+        const initialWidth = imageRect.width * 0.75;
+        const initialHeight = imageRect.height * 0.75;
+        const initialLeft = (imageRect.width - initialWidth) / 2;
+        const initialTop = (imageRect.height - initialHeight) / 2;
+
+        cropArea.style.width = initialWidth + 'px';
+        cropArea.style.height = initialHeight + 'px';
+        cropArea.style.left = initialLeft + 'px';
+        cropArea.style.top = initialTop + 'px';
+
+        // Add crop handles
+        const handles = ['nw', 'ne', 'sw', 'se'];
+        handles.forEach(pos => {
+            const handle = document.createElement('div');
+            handle.className = `crop-handle ${pos}`;
+            cropArea.appendChild(handle);
+        });
+
+        // Add crop controls
+        const controls = document.createElement('div');
+        controls.className = 'crop-controls';
+        controls.innerHTML = `
+            <button class="apply-crop">Apply Crop</button>
+            <button class="cancel-crop">Cancel</button>
+        `;
+
+        // Add elements to DOM
+        overlay.appendChild(cropArea);
+        wrapper.appendChild(overlay);
+        wrapper.appendChild(controls);
+
+        // Variables for drag state
+        let isDragging = false;
+        let isResizing = false;
+        let activeHandle = null;
+        let startX, startY, startWidth, startHeight, startLeft, startTop;
+
+        // Handle crop area dragging
+        cropArea.addEventListener('mousedown', startDrag);
+        
+        // Handle crop area resizing
+        cropArea.querySelectorAll('.crop-handle').forEach(handle => {
+            handle.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                isResizing = true;
+                activeHandle = handle;
+                startX = e.clientX;
+                startY = e.clientY;
+                startWidth = cropArea.offsetWidth;
+                startHeight = cropArea.offsetHeight;
+                startLeft = cropArea.offsetLeft;
+                startTop = cropArea.offsetTop;
+            });
+        });
+
+        function startDrag(e) {
+            if (e.target !== cropArea) return;
+            isDragging = true;
+            startX = e.clientX - cropArea.offsetLeft;
+            startY = e.clientY - cropArea.offsetTop;
+        }
+
+        function handleDrag(e) {
+            if (!isDragging && !isResizing) return;
+
+            if (isDragging) {
+                let newLeft = e.clientX - startX;
+                let newTop = e.clientY - startY;
+
+                // Constrain to image boundaries
+                newLeft = Math.max(0, Math.min(newLeft, imageRect.width - cropArea.offsetWidth));
+                newTop = Math.max(0, Math.min(newTop, imageRect.height - cropArea.offsetHeight));
+
+                cropArea.style.left = newLeft + 'px';
+                cropArea.style.top = newTop + 'px';
+            }
+
+            if (isResizing) {
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+
+                if (activeHandle.classList.contains('se')) {
+                    const newWidth = Math.min(startWidth + dx, imageRect.width - startLeft);
+                    const newHeight = Math.min(startHeight + dy, imageRect.height - startTop);
+                    cropArea.style.width = Math.max(50, newWidth) + 'px';
+                    cropArea.style.height = Math.max(50, newHeight) + 'px';
+                } else if (activeHandle.classList.contains('sw')) {
+                    const newWidth = Math.min(startWidth - dx, startLeft + startWidth);
+                    const newHeight = Math.min(startHeight + dy, imageRect.height - startTop);
+                    const newLeft = Math.max(0, startLeft + dx);
+                    cropArea.style.width = Math.max(50, newWidth) + 'px';
+                    cropArea.style.height = Math.max(50, newHeight) + 'px';
+                    cropArea.style.left = newLeft + 'px';
+                } else if (activeHandle.classList.contains('ne')) {
+                    const newWidth = Math.min(startWidth + dx, imageRect.width - startLeft);
+                    const newHeight = Math.min(startHeight - dy, startTop + startHeight);
+                    const newTop = Math.max(0, startTop + dy);
+                    cropArea.style.width = Math.max(50, newWidth) + 'px';
+                    cropArea.style.height = Math.max(50, newHeight) + 'px';
+                    cropArea.style.top = newTop + 'px';
+                } else if (activeHandle.classList.contains('nw')) {
+                    const newWidth = Math.min(startWidth - dx, startLeft + startWidth);
+                    const newHeight = Math.min(startHeight - dy, startTop + startHeight);
+                    const newLeft = Math.max(0, startLeft + dx);
+                    const newTop = Math.max(0, startTop + dy);
+                    cropArea.style.width = Math.max(50, newWidth) + 'px';
+                    cropArea.style.height = Math.max(50, newHeight) + 'px';
+                    cropArea.style.left = newLeft + 'px';
+                    cropArea.style.top = newTop + 'px';
+                }
+            }
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            isResizing = false;
+            activeHandle = null;
+        }
+
+        // Add document-level event listeners
+        document.addEventListener('mousemove', handleDrag);
+        document.addEventListener('mouseup', stopDrag);
+
+        // Create a function that captures all necessary variables
+        const handleApplyCrop = () => {
+            applyCrop(wrapper, cropArea, imageRect, imageBeingCropped);
+        };
+
+        // Handle crop controls
+        controls.querySelector('.apply-crop').addEventListener('click', handleApplyCrop);
+
+        controls.querySelector('.cancel-crop').addEventListener('click', () => {
+            cleanup();
+        });
+
+        function cleanup() {
+            overlay.remove();
+            controls.remove();
+            document.removeEventListener('mousemove', handleDrag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+    }
+
+    function applyCrop(wrapper, cropArea, imageRect, imageBeingCropped) {
+        if (!imageBeingCropped) {
+            console.error('No image to crop');
+            return;
+        }
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Calculate crop dimensions
+        const scale = imageBeingCropped.naturalWidth / imageRect.width;
+        const cropX = cropArea.offsetLeft * scale;
+        const cropY = cropArea.offsetTop * scale;
+        const cropWidth = cropArea.offsetWidth * scale;
+        const cropHeight = cropArea.offsetHeight * scale;
+
+        // Set canvas dimensions to crop size
+        canvas.width = cropWidth;
+        canvas.height = cropHeight;
+
+        // Draw cropped portion of image
+        ctx.drawImage(
+            imageBeingCropped,
+            cropX, cropY, cropWidth, cropHeight,
+            0, 0, cropWidth, cropHeight
+        );
+
+        // Update the source of the original image
+        imageBeingCropped.src = canvas.toDataURL();
+        imageBeingCropped.style.width = '100%';
+        imageBeingCropped.style.height = 'auto';
+
+        // Clean up crop interface
+        wrapper.querySelector('.crop-overlay').remove();
+        wrapper.querySelector('.crop-controls').remove();
+
+        // Save history
+        saveHistory();
+    }
+
+    function showSizeDialog(e) {
+        e.stopPropagation();
+        
+        // Create size dialog
+        const dialog = document.createElement('div');
+        dialog.className = 'image-size-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-content">
+                <h3>Adjust Image Size</h3>
+                <div class="form-group">
+                    <label>Width (px):</label>
+                    <input type="number" id="resize-width" value="${activeImage.offsetWidth}">
+                </div>
+                <div class="form-group">
+                    <label>Height (px):</label>
+                    <input type="number" id="resize-height" value="${activeImage.offsetHeight}">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="maintain-aspect" checked>
+                        Maintain aspect ratio
+                    </label>
+                </div>
+                <div class="dialog-buttons">
+                    <button id="apply-size">Apply</button>
+                    <button id="cancel-size">Cancel</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        
+        const widthInput = dialog.querySelector('#resize-width');
+        const heightInput = dialog.querySelector('#resize-height');
+        const aspectCheckbox = dialog.querySelector('#maintain-aspect');
+        const aspectRatio = activeImage.offsetWidth / activeImage.offsetHeight;
+        
+        // Handle width/height changes
+        widthInput.addEventListener('input', () => {
+            if (aspectCheckbox.checked) {
+                heightInput.value = Math.round(widthInput.value / aspectRatio);
+            }
+        });
+        
+        heightInput.addEventListener('input', () => {
+            if (aspectCheckbox.checked) {
+                widthInput.value = Math.round(heightInput.value * aspectRatio);
+            }
+        });
+        
+        // Handle buttons
+        dialog.querySelector('#apply-size').addEventListener('click', () => {
+            activeImage.style.width = `${widthInput.value}px`;
+            activeImage.style.height = `${heightInput.value}px`;
+            updateImageToolbarPosition();
+            dialog.remove();
+            saveHistory();
+        });
+        
+        dialog.querySelector('#cancel-size').addEventListener('click', () => {
+            dialog.remove();
+        });
+    }
+
+    function alignImage(alignment) {
+        if (!activeImage) return;
+        
+        const wrapper = activeImage.closest('.image-wrapper');
+        if (!wrapper) return;
+        
+        // Don't allow alignment changes in floating mode
+        if (wrapper.classList.contains('absolute')) {
+            showNotification('Cannot change alignment while image is floating. Disable float mode first.', 'warning');
+            return;
+        }
+        
+        // Reset wrapper styles that might interfere with alignment
+        wrapper.style.position = 'relative';
+        wrapper.style.display = 'inline-block';
+        wrapper.style.left = '';
+        wrapper.style.transform = '';
+        wrapper.style.margin = '';
+        
+        // Create or find alignment container
+        let alignContainer = wrapper.parentElement;
+        if (!alignContainer.classList.contains('image-align-container')) {
+            alignContainer = document.createElement('div');
+            alignContainer.className = 'image-align-container';
+            wrapper.parentNode.insertBefore(alignContainer, wrapper);
+            alignContainer.appendChild(wrapper);
+        }
+        
+        // Set container styles
+        alignContainer.style.display = 'block';
+        alignContainer.style.textAlign = alignment;
+        
+        // Update toolbar state
+        const alignButtons = document.querySelectorAll('.toolbar-btn i[class*="fa-align-"]');
+        alignButtons.forEach(btn => btn.parentElement.classList.remove('active'));
+        const activeBtn = document.querySelector(`.toolbar-btn i.fa-align-${alignment}`);
+        if (activeBtn) activeBtn.parentElement.classList.add('active');
+        
+        saveHistory();
+    }
+
+    function deleteImage() {
+        if (!activeImage) return;
+        
+        // Remove the image
+        activeImage.remove();
+        removeImageToolbar();
+        activeImage = null;
+        saveHistory();
+    }
+
+    // Add these new functions
+    function showHandles() {
+        // Clear any pending hide timeout
+        if (hideHandlesTimeout) {
+            clearTimeout(hideHandlesTimeout);
+            hideHandlesTimeout = null;
+        }
+        
+        // Only proceed if we have an active image
+        if (!activeImage) return;
+        
+        // Show handles immediately
+        const wrapper = activeImage.closest('.image-wrapper');
+        if (wrapper) {
+            const handles = wrapper.querySelectorAll('.resize-handle');
+            handles.forEach(handle => {
+                handle.style.display = 'block';
+                handle.style.opacity = '1';
+            });
+        }
+    }
+
+    function hideHandlesWithDelay() {
+        // Clear any existing timeout
+        if (hideHandlesTimeout) {
+            clearTimeout(hideHandlesTimeout);
+        }
+        
+        // Only proceed if we have an active image
+        if (!activeImage) return;
+        
+        // Set new timeout to hide handles
+        hideHandlesTimeout = setTimeout(() => {
+            const wrapper = activeImage.closest('.image-wrapper');
+            if (wrapper) {
+                const handles = wrapper.querySelectorAll('.resize-handle');
+                handles.forEach(handle => {
+                    handle.style.opacity = '0';
+                    // Remove display after fade out
+                    setTimeout(() => {
+                        if (handle.style.opacity === '0') {
+                            handle.style.display = 'none';
+                        }
+                    }, 200);
+                });
+            }
+            hideHandlesTimeout = null;
+        }, 700); // 0.7 seconds for hover behavior
+    }
+
+    // Add new function to handle image wrapping
+    function toggleFloating(e) {
+        if (!activeImage) return;
+        
+        const wrapper = activeImage.closest('.image-wrapper');
+        if (!wrapper) return;
+        
+        const floatBtn = document.getElementById('float-btn');
+        const isCurrentlyFloating = wrapper.classList.contains('absolute');
+        
+        // Reset all positioning styles
+        wrapper.style.position = '';
+        wrapper.style.float = '';
+        wrapper.style.margin = '';
+        wrapper.style.display = '';
+        wrapper.style.left = '';
+        wrapper.style.top = '';
+        wrapper.style.width = '';
+        wrapper.style.cursor = '';
+        wrapper.classList.remove('absolute');
+        
+        // Remove draggable functionality if it exists
+        if (activeImageDragHandler) {
+            wrapper.removeEventListener('mousedown', activeImageDragHandler);
+            activeImageDragHandler = null;
+        }
+        
+        if (!isCurrentlyFloating) {
+            // Switch to floating mode
+            wrapper.style.position = 'absolute';
+            wrapper.style.display = 'inline-block';
+            wrapper.classList.add('absolute');
+            
+            // Position near current location
+            const rect = wrapper.getBoundingClientRect();
+            const editorRect = editor.getBoundingClientRect();
+            wrapper.style.top = (rect.top - editorRect.top) + 'px';
+            wrapper.style.left = (rect.left - editorRect.left) + 'px';
+            
+            makeWrapperDraggable(wrapper);
+            floatBtn.classList.add('active');
+        } else {
+            // Switch back to in-text mode
+            wrapper.style.position = 'relative';
+            wrapper.style.display = 'block';
+            floatBtn.classList.remove('active');
+        }
+        
+        // Ensure the editor recognizes the change
+        const tempText = document.createTextNode('\u200B');
+        editor.appendChild(tempText);
+        editor.removeChild(tempText);
+        
+        saveHistory();
+    }
+
+    // Add function to make wrapper draggable for absolute positioning
+    function makeWrapperDraggable(wrapper) {
+        if (!wrapper) return;
+        
+        let isDragging = false;
+        let startX, startY;
+        let startPosX, startPosY;
+        
+        wrapper.style.cursor = 'move';
+        
+        // Create the startDrag function
+        function startDrag(e) {
+            // Only handle primary button (usually left click)
+            if (e.button !== 0) return;
+            
+            // Don't start drag if clicking resize handle
+            if (e.target.classList.contains('resize-handle')) return;
+            
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startPosX = parseInt(wrapper.style.left) || 0;
+            startPosY = parseInt(wrapper.style.top) || 0;
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+            
+            e.preventDefault();
+        }
+        
+        function drag(e) {
+            if (!isDragging) return;
+            
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            
+            wrapper.style.left = (startPosX + dx) + 'px';
+            wrapper.style.top = (startPosY + dy) + 'px';
+        }
+        
+        function stopDrag() {
+            if (!isDragging) return;
+            
+            isDragging = false;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+            saveHistory();
+        }
+        
+        // Store the startDrag handler for later removal
+        activeImageDragHandler = startDrag;
+        wrapper.addEventListener('mousedown', activeImageDragHandler);
+    }
+
+    // Add new function to update alignment buttons state
+    function updateAlignmentButtonsState() {
+        const wrapper = activeImage.closest('.image-wrapper');
+        if (!wrapper || wrapper.classList.contains('absolute')) return;
+        
+        // Get all alignment buttons
+        const alignButtons = {
+            left: document.querySelector('#justify-left-btn'),
+            center: document.querySelector('#justify-center-btn'),
+            right: document.querySelector('#justify-right-btn'),
+            full: document.querySelector('#justify-full-btn')
+        };
+        
+        // Remove active state from all buttons
+        Object.values(alignButtons).forEach(btn => {
+            if (btn) btn.classList.remove('active');
+        });
+        
+        // Get current alignment
+        const textAlign = wrapper.style.textAlign;
+        
+        // Update corresponding button
+        if (alignButtons[textAlign]) {
+            alignButtons[textAlign].classList.add('active');
+        }
     }
 }); 

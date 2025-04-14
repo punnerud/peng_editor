@@ -9,74 +9,76 @@
 </head>
 <body>
     <div class="editor-container">
-        <div class="toolbar">
-            <div class="toolbar-group">
-                <button id="undo-btn" title="Undo"><i class="fas fa-undo"></i></button>
-                <button id="redo-btn" title="Redo"><i class="fas fa-redo"></i></button>
-            </div>
-            <div class="toolbar-group">
-                <button id="bold-btn" title="Bold"><i class="fas fa-bold"></i></button>
-                <button id="italic-btn" title="Italic"><i class="fas fa-italic"></i></button>
-                <button id="underline-btn" title="Underline"><i class="fas fa-underline"></i></button>
-                <button id="strikethrough-btn" title="Strikethrough"><i class="fas fa-strikethrough"></i></button>
-            </div>
-            <div class="toolbar-group">
-                <select id="format-block">
-                    <option value="p">Paragraph</option>
-                    <option value="h1">Heading 1</option>
-                    <option value="h2">Heading 2</option>
-                    <option value="h3">Heading 3</option>
-                    <option value="h4">Heading 4</option>
-                    <option value="h5">Heading 5</option>
-                    <option value="h6">Heading 6</option>
-                    <option value="pre">Preformatted</option>
-                </select>
-            </div>
-            <div class="toolbar-group">
-                <button id="justify-left-btn" title="Align Left"><i class="fas fa-align-left"></i></button>
-                <button id="justify-center-btn" title="Align Center"><i class="fas fa-align-center"></i></button>
-                <button id="justify-right-btn" title="Align Right"><i class="fas fa-align-right"></i></button>
-                <button id="justify-full-btn" title="Justify"><i class="fas fa-align-justify"></i></button>
-            </div>
-            <div class="toolbar-group">
-                <button id="ordered-list-btn" title="Ordered List"><i class="fas fa-list-ol"></i></button>
-                <button id="unordered-list-btn" title="Unordered List"><i class="fas fa-list-ul"></i></button>
-                <button id="indent-btn" title="Indent"><i class="fas fa-indent"></i></button>
-                <button id="outdent-btn" title="Outdent"><i class="fas fa-outdent"></i></button>
-            </div>
-            <div class="toolbar-group">
-                <button id="link-btn" title="Insert Link"><i class="fas fa-link"></i></button>
-                <button id="image-btn" title="Insert Image"><i class="fas fa-image"></i></button>
-                <button id="table-btn" title="Insert Table"><i class="fas fa-table"></i></button>
-                <button id="code-btn" title="Insert Code"><i class="fas fa-code"></i></button>
-                <button id="emoji-btn" title="Insert Emoji"><i class="far fa-smile"></i></button>
-            </div>
-            <div class="toolbar-group">
-                <input type="color" id="forecolor-picker" title="Text Color">
-                <input type="color" id="backcolor-picker" title="Background Color">
-            </div>
-            <div class="toolbar-group">
-                <select id="font-family">
-                    <option value="Arial, sans-serif">Arial</option>
-                    <option value="'Times New Roman', serif">Times New Roman</option>
-                    <option value="'Courier New', monospace">Courier New</option>
-                    <option value="Georgia, serif">Georgia</option>
-                    <option value="Verdana, sans-serif">Verdana</option>
-                    <option value="'Helvetica Neue', Helvetica, sans-serif">Helvetica</option>
-                </select>
-                <select id="font-size">
-                    <option value="1">8pt</option>
-                    <option value="2">10pt</option>
-                    <option value="3" selected>12pt</option>
-                    <option value="4">14pt</option>
-                    <option value="5">18pt</option>
-                    <option value="6">24pt</option>
-                    <option value="7">36pt</option>
-                </select>
-            </div>
-            <div class="toolbar-group">
-                <button id="clear-format-btn" title="Clear Formatting"><i class="fas fa-eraser"></i></button>
-                <button id="source-btn" title="View Source"><i class="fas fa-code"></i></button>
+        <div class="toolbar-container">
+            <div class="toolbar">
+                <div class="toolbar-group">
+                    <button id="undo-btn" title="Undo"><i class="fas fa-undo"></i></button>
+                    <button id="redo-btn" title="Redo"><i class="fas fa-redo"></i></button>
+                </div>
+                <div class="toolbar-group">
+                    <button id="bold-btn" title="Bold"><i class="fas fa-bold"></i></button>
+                    <button id="italic-btn" title="Italic"><i class="fas fa-italic"></i></button>
+                    <button id="underline-btn" title="Underline"><i class="fas fa-underline"></i></button>
+                    <button id="strikethrough-btn" title="Strikethrough"><i class="fas fa-strikethrough"></i></button>
+                </div>
+                <div class="toolbar-group">
+                    <select id="format-block">
+                        <option value="p">Paragraph</option>
+                        <option value="h1">Heading 1</option>
+                        <option value="h2">Heading 2</option>
+                        <option value="h3">Heading 3</option>
+                        <option value="h4">Heading 4</option>
+                        <option value="h5">Heading 5</option>
+                        <option value="h6">Heading 6</option>
+                        <option value="pre">Preformatted</option>
+                    </select>
+                </div>
+                <div class="toolbar-group">
+                    <button id="justify-left-btn" title="Align Left"><i class="fas fa-align-left"></i></button>
+                    <button id="justify-center-btn" title="Align Center"><i class="fas fa-align-center"></i></button>
+                    <button id="justify-right-btn" title="Align Right"><i class="fas fa-align-right"></i></button>
+                    <button id="justify-full-btn" title="Justify"><i class="fas fa-align-justify"></i></button>
+                </div>
+                <div class="toolbar-group">
+                    <button id="ordered-list-btn" title="Ordered List"><i class="fas fa-list-ol"></i></button>
+                    <button id="unordered-list-btn" title="Unordered List"><i class="fas fa-list-ul"></i></button>
+                    <button id="indent-btn" title="Indent"><i class="fas fa-indent"></i></button>
+                    <button id="outdent-btn" title="Outdent"><i class="fas fa-outdent"></i></button>
+                </div>
+                <div class="toolbar-group">
+                    <button id="link-btn" title="Insert Link"><i class="fas fa-link"></i></button>
+                    <button id="image-btn" title="Insert Image"><i class="fas fa-image"></i></button>
+                    <button id="table-btn" title="Insert Table"><i class="fas fa-table"></i></button>
+                    <button id="code-btn" title="Insert Code"><i class="fas fa-code"></i></button>
+                    <button id="emoji-btn" title="Insert Emoji"><i class="far fa-smile"></i></button>
+                </div>
+                <div class="toolbar-group">
+                    <input type="color" id="forecolor-picker" title="Text Color">
+                    <input type="color" id="backcolor-picker" title="Background Color">
+                </div>
+                <div class="toolbar-group">
+                    <select id="font-family">
+                        <option value="Arial, sans-serif">Arial</option>
+                        <option value="'Times New Roman', serif">Times New Roman</option>
+                        <option value="'Courier New', monospace">Courier New</option>
+                        <option value="Georgia, serif">Georgia</option>
+                        <option value="Verdana, sans-serif">Verdana</option>
+                        <option value="'Helvetica Neue', Helvetica, sans-serif">Helvetica</option>
+                    </select>
+                    <select id="font-size">
+                        <option value="1">8pt</option>
+                        <option value="2">10pt</option>
+                        <option value="3" selected>12pt</option>
+                        <option value="4">14pt</option>
+                        <option value="5">18pt</option>
+                        <option value="6">24pt</option>
+                        <option value="7">36pt</option>
+                    </select>
+                </div>
+                <div class="toolbar-group">
+                    <button id="clear-format-btn" title="Clear Formatting"><i class="fas fa-eraser"></i></button>
+                    <button id="source-btn" title="View Source"><i class="fas fa-code"></i></button>
+                </div>
             </div>
         </div>
         
