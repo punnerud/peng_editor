@@ -106,6 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const sourceBtn = document.getElementById('source-btn');
     const saveBtn = document.getElementById('save-btn');
     const loadBtn = document.getElementById('load-btn');
+    const printBtn = document.getElementById('print-btn');
     const pipetteBtn = document.createElement('button'); // Create new pipette button
     
     // Dialog elements
@@ -317,6 +318,26 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set up the pipette button
         setupPipetteButton();
         
+        // Add default styles to editor
+        const editorStyles = document.createElement('style');
+        editorStyles.textContent = `
+            #editor {
+                min-height: 500px;
+                padding: 10px;
+                overflow-y: auto;
+                background: white;
+            }
+            #editor p {
+                margin: 0;
+                padding: 0;
+                min-height: 1.2em;
+            }
+            #editor p:empty::after {
+                content: '\\200B'; /* Zero-width space to maintain height */
+            }
+        `;
+        document.head.appendChild(editorStyles);
+
         // Remove default content if editor is empty or just contains placeholder
         if (editor.innerHTML.trim() === '' || 
             editor.innerHTML.includes('Start typing your content here')) {
@@ -547,6 +568,7 @@ document.addEventListener('DOMContentLoaded', function() {
         italicBtn.addEventListener('click', () => execCommand('italic'));
         underlineBtn.addEventListener('click', () => execCommand('underline'));
         strikethroughBtn.addEventListener('click', () => execCommand('strikeThrough'));
+        printBtn.addEventListener('click', handlePrint);
         
         formatBlock.addEventListener('change', function() {
             execCommand('formatBlock', false, '<' + this.value + '>');
@@ -5411,5 +5433,157 @@ document.addEventListener('DOMContentLoaded', function() {
         if (alignButtons[textAlign]) {
             alignButtons[textAlign].classList.add('active');
         }
+    }
+
+    // Add print functionality
+    function handlePrint() {
+        // Create a new window for printing
+        const printWindow = window.open('', '_blank');
+        
+        // Get the editor content
+        const content = editor.innerHTML;
+        
+        // Get current page width setting from localStorage
+        const settings = JSON.parse(localStorage.getItem('editorSettings')) || {};
+        const pageWidth = settings.pageWidth || 'a4';
+        
+        // Define page dimensions
+        const pageDimensions = {
+            a4: {
+                width: '210mm',
+                height: '297mm'
+            },
+            letter: {
+                width: '216mm',
+                height: '279mm'
+            }
+        };
+        
+        // Get the dimensions for the current page format
+        const currentPageDims = pageWidth !== 'none' ? pageDimensions[pageWidth] : null;
+        
+        // Create a styled document for printing
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Print Document</title>
+                <style>
+                    @page {
+                        size: ${pageWidth === 'none' ? 'auto' : pageWidth + ' portrait'};
+                        margin: 20mm;
+                    }
+                    body {
+                        font-family: Arial, sans-serif;
+                        line-height: 1.2;
+                        margin: 0;
+                        color: #000;
+                        background: white;
+                    }
+                    .content-wrapper {
+                        ${currentPageDims ? `
+                            width: ${currentPageDims.width};
+                            margin: 0 auto;
+                            background: white;
+                            position: relative;
+                            box-sizing: border-box;
+                            padding: 20px;
+                        ` : `
+                            margin: 20px;
+                        `}
+                        /* Editor-like text rendering */
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        word-break: break-word;
+                        overflow-wrap: break-word;
+                    }
+                    /* Reset paragraph spacing */
+                    .content-wrapper p {
+                        margin: 0;
+                        padding: 0;
+                        min-height: 1.2em;
+                    }
+                    /* Handle empty paragraphs */
+                    .content-wrapper p:empty::after {
+                        content: '\\200B'; /* Zero-width space */
+                    }
+                    /* Preserve spaces and tabs */
+                    .content-wrapper pre {
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        font-family: monospace;
+                        margin: 0;
+                    }
+                    img {
+                        max-width: 100%;
+                        height: auto;
+                        vertical-align: middle;
+                    }
+                    /* Image wrapper styles */
+                    .image-wrapper {
+                        display: inline-block;
+                        position: relative;
+                    }
+                    .image-wrapper.absolute {
+                        position: absolute;
+                    }
+                    /* Image alignment container */
+                    .image-align-container {
+                        display: block;
+                        text-align: inherit;
+                    }
+                    @media print {
+                        body {
+                            margin: 0;
+                            padding: 0;
+                        }
+                        .content-wrapper {
+                            margin: 0 auto;
+                            padding: 0;
+                            width: 100%;
+                        }
+                        img {
+                            page-break-inside: avoid;
+                        }
+                        h1, h2, h3, h4, h5, h6 {
+                            page-break-after: avoid;
+                            margin: 0.5em 0;
+                        }
+                        /* Ensure floating images print correctly */
+                        .image-wrapper.absolute {
+                            position: relative !important;
+                            float: left;
+                            margin: 10px;
+                        }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="content-wrapper">
+                    ${content}
+                </div>
+                <script>
+                    // Fix any absolute positioned images for printing
+                    document.querySelectorAll('.image-wrapper.absolute').forEach(wrapper => {
+                        const rect = wrapper.getBoundingClientRect();
+                        wrapper.style.position = 'relative';
+                        wrapper.style.float = 'left';
+                        wrapper.style.margin = '10px';
+                    });
+
+                    // Automatically trigger print when content is loaded
+                    window.onload = function() {
+                        window.print();
+                        // Close the window after printing (for most browsers)
+                        setTimeout(function() {
+                            window.close();
+                        }, 500);
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
     }
 }); 
