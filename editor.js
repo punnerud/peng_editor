@@ -1,4 +1,73 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Base64 image storage system
+    const base64Storage = {
+        images: {},
+        counter: 0,
+        
+        // Add a new BASE64 image and get its placeholder
+        add: function(base64Data) {
+            this.counter++;
+            const placeholder = `(big_bunch_of_image_data)_V${this.counter}`;
+            this.images[placeholder] = base64Data;
+            return placeholder;
+        },
+        
+        // Get BASE64 data from placeholder
+        get: function(placeholder) {
+            return this.images[placeholder] || placeholder;
+        },
+        
+        // Replace all placeholders with actual BASE64 data
+        expandPlaceholders: function(html) {
+            let result = html;
+            
+            // First find all data URLs with placeholders
+            const dataUrlRegex = /data:image\/[^;]+;base64,[^"'>}]+/g;
+            result = result.replace(dataUrlRegex, (match) => {
+                // Extract the placeholder part
+                const parts = match.split(',');
+                if (parts.length !== 2) return match;
+                
+                const prefix = parts[0];
+                const placeholder = parts[1];
+                
+                // If we have this placeholder stored, replace it
+                if (this.images[placeholder]) {
+                    const fullDataUrl = this.images[placeholder];
+                    console.log('Expanding placeholder:', placeholder);
+                    return fullDataUrl;
+                }
+                
+                return match;
+            });
+            
+            return result;
+        },
+        
+        // Replace all BASE64 data with placeholders
+        createPlaceholders: function(html) {
+            let result = html;
+            const base64Regex = /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g;
+            
+            result = result.replace(base64Regex, (match) => {
+                // Don't replace if it's already a placeholder
+                if (match.includes('(big_bunch_of_image_data)')) {
+                    return match;
+                }
+                
+                // Store the full data URL
+                const placeholder = this.add(match);
+                console.log('Created placeholder:', placeholder);
+                
+                // Return the data URL prefix with the placeholder
+                const prefix = match.split(',')[0];
+                return `${prefix},${placeholder}`;
+            });
+            
+            return result;
+        }
+    };
+
     // Elements
     const editor = document.getElementById('editor');
     const htmlSource = document.getElementById('html-source');
@@ -948,21 +1017,150 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleSourceView() {
         if (isSourceView) {
             // Switch back to rich text view
-            editor.innerHTML = htmlSource.value;
+            console.log('Switching to rich text view');
+            
+            // Expand all placeholders back to full BASE64
+            const expandedHtml = base64Storage.expandPlaceholders(htmlSource.value);
+            editor.innerHTML = expandedHtml;
             editor.style.display = 'block';
             htmlSource.style.display = 'none';
+            
+            // Remove source view specific classes
+            htmlSource.classList.remove('editor-with-line-numbers');
+            editor.classList.add('editor-with-line-numbers');
+            
             sourceBtn.classList.remove('active');
         } else {
             // Switch to HTML source view
-            htmlSource.value = formatHTML(editor.innerHTML);
+            console.log('Switching to source view');
+            
+            // Replace BASE64 data with placeholders
+            const htmlWithPlaceholders = base64Storage.createPlaceholders(editor.innerHTML);
+            htmlSource.value = formatHTML(htmlWithPlaceholders);
+            
+            // Copy editor dimensions to textarea
+            const editorStyle = window.getComputedStyle(editor);
+            htmlSource.style.minHeight = editorStyle.minHeight;
+            htmlSource.style.height = editorStyle.height;
+            htmlSource.style.padding = editorStyle.padding;
+            
+            // Add source view specific classes
+            editor.classList.remove('editor-with-line-numbers');
+            htmlSource.classList.add('editor-with-line-numbers');
+            
             editor.style.display = 'none';
             htmlSource.style.display = 'block';
             sourceBtn.classList.add('active');
+            
+            // Ensure textarea adjusts its height
+            adjustTextareaHeight();
         }
         
         isSourceView = !isSourceView;
         updateWordCount();
     }
+
+    // Function to adjust textarea height based on content
+    function adjustTextareaHeight() {
+        const textarea = htmlSource;
+        if (!textarea) return;
+        
+        // Reset height to allow shrinking
+        textarea.style.height = 'auto';
+        
+        // Set new height based on scrollHeight
+        textarea.style.height = textarea.scrollHeight + 'px';
+        
+        // Update line numbers
+        updateLineNumbers();
+    }
+
+    // Add event listeners for textarea resizing
+    htmlSource.addEventListener('input', adjustTextareaHeight);
+    htmlSource.addEventListener('change', adjustTextareaHeight);
+    
+    // Also adjust on window resize
+    window.addEventListener('resize', () => {
+        if (isSourceView) {
+            adjustTextareaHeight();
+        }
+    });
+
+    // Initial setup for textarea
+    const initialStyle = document.createElement('style');
+    initialStyle.textContent = `
+        #html-source.editor-with-line-numbers {
+            width: 100%;
+            min-height: 200px;
+            padding: 10px 40px 10px 10px;
+            line-height: 1.5;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            resize: vertical;
+            border: none;
+            outline: none;
+            background: #1e1e1e;
+            color: #ffffff;
+        }
+        
+        #html-source.editor-with-line-numbers:focus {
+            outline: none;
+            box-shadow: none;
+        }
+        
+        .editor-main {
+            position: relative;
+        }
+        
+        /* Default light theme for visual editor */
+        .line-numbers {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 30px;
+            padding: 15px 0 20px 0;
+            background: #f5f5f5;
+            border-right: 1px solid #ddd;
+            user-select: none;
+            pointer-events: none;
+            color: #333333;
+        }
+
+        /* Line number positioning */
+        .line-number {
+            position: absolute;
+            right: 8px;
+            text-align: right;
+            color: #999;
+            font-size: 12px;
+            font-family: monospace;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            width: 90%;
+            transform: translateY(2px); /* Adjust line number position down slightly */
+            height: auto !important;
+            min-height: 20px;
+            padding: 2px 0;
+            touch-action: manipulation;
+        }
+
+        /* Dark theme line numbers only when in source view */
+        .editor-main:has(#html-source.editor-with-line-numbers[style*="display: block"]) .line-numbers {
+            background: #252526;
+            border-right-color: #333333;
+            color: #858585;
+        }
+
+        /* Adjust line number color for visual editor */
+        .editor-main:has(#editor[style*="display: block"]) .line-number {
+            color: #666;
+        }
+    `;
+    document.head.appendChild(initialStyle);
     
     // Format HTML with indentation for better readability
     function formatHTML(html) {
@@ -1370,30 +1568,91 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('No selection range to store for image');
         }
         
+        // Clear any previous values
+        imageUrl.value = '';
+        imageAlt.value = '';
+        imageWidth.value = '';
+        imageHeight.value = '';
+        document.getElementById('image-file').value = '';
+        
+        // Add file input change handler
+        const imageFileInput = document.getElementById('image-file');
+        imageFileInput.addEventListener('change', handleImageFileSelect);
+        
         // Show the dialog and focus URL field
         imageDialog.style.display = 'flex';
         imageUrl.focus();
     }
-    
+
+    // Handle file selection for image upload
+    function handleImageFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Only accept image files
+        if (!file.type.startsWith('image/')) {
+            showNotification('Please select an image file', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Data = e.target.result;
+            // Store the full data URL in base64Storage
+            const placeholder = base64Storage.add(base64Data);
+            
+            // Store the data URL and placeholder
+            imageUrl.dataset.base64 = base64Data;
+            imageUrl.dataset.placeholder = placeholder;
+            
+            // Set a placeholder URL to indicate file is selected
+            imageUrl.value = file.name;
+            imageUrl.disabled = true;
+            
+            // Create a test image to verify the data URL works
+            const testImg = new Image();
+            testImg.onload = function() {
+                console.log('Image data URL verified as valid');
+            };
+            testImg.onerror = function() {
+                console.error('Image data URL verification failed');
+            };
+            testImg.src = base64Data;
+            
+            console.log('Image loaded and placeholder created');
+        };
+        
+        reader.onerror = function() {
+            console.error('Error reading file');
+            showNotification('Error reading image file. Please try again.', 'error');
+        };
+        
+        reader.readAsDataURL(file);
+    }
+
     // Insert image
     function insertImage() {
-        const url = imageUrl.value.trim();
+        let url = imageUrl.value.trim();
         const alt = imageAlt.value.trim();
         const width = imageWidth.value.trim();
         const height = imageHeight.value.trim();
         
-        console.log(`Image insertion - URL: ${url}, Alt: ${alt}, Width: ${width}, Height: ${height}`);
+        // Check if we have a BASE64 image
+        if (imageUrl.dataset.base64) {
+            // Use the actual data URL for the image
+            url = imageUrl.dataset.base64;
+        }
+        
+        console.log(`Image insertion - Alt: ${alt}, Width: ${width}, Height: ${height}`);
         
         if (url) {
+            const imgHTML = `<img src="${url}" alt="${alt}"${width ? ` width="${width}"` : ''}${height ? ` height="${height}"` : ''}>`;
+            
             if (isSourceView) {
-                const imgHTML = `<img src="${url}" alt="${alt}"${width ? ` width="${width}"` : ''}${height ? ` height="${height}"` : ''}>`;
                 insertAtCursor(htmlSource, imgHTML);
                 console.log('Inserted image in source view');
             } else {
                 try {
-                    // Create image HTML
-                    const imgHTML = `<img src="${url}" alt="${alt}"${width ? ` width="${width}"` : ''}${height ? ` height="${height}"` : ''}>`;
-                    
                     // First remove any existing highlighting
                     removeHighlighting();
                     
@@ -1467,14 +1726,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         } else {
-            console.log('No image URL provided, image not inserted');
+            console.log('No image URL or file provided, image not inserted');
+            showNotification('Please provide an image URL or select a file', 'warning');
+            return;
         }
         
+        // Clear the dialog
         hideAllDialogs();
         imageUrl.value = '';
+        imageUrl.disabled = false;
+        imageUrl.dataset.base64 = '';
         imageAlt.value = '';
         imageWidth.value = '';
         imageHeight.value = '';
+        document.getElementById('image-file').value = '';
     }
     
     // Show table dialog
@@ -1848,8 +2113,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Save content
     function saveContent() {
-        const content = isSourceView ? htmlSource.value : editor.innerHTML;
-        
+        let content;
+        if (isSourceView) {
+            content = base64Storage.expandPlaceholders(htmlSource.value);
+        } else {
+            content = editor.innerHTML;
+        }
+
         // Create a Blob with the HTML content
         const blob = new Blob([content], {type: 'text/html'});
         
@@ -1871,7 +2141,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Add .html extension if not present (we're always saving HTML files)
+        // Add .html extension if not present
         if (!filename.toLowerCase().endsWith('.html')) {
             filename += '.html';
         }
