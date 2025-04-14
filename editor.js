@@ -1600,52 +1600,52 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Show image dialog
-    function showImageDialog() {
-        // First focus the editor to ensure selection is within it
-        editor.focus();
-        
+    function showImageDialog(e) {
+        // Prevent editor focus
+        e.preventDefault();
+        e.stopPropagation();
+
         // Save the current selection for later use
         const selection = window.getSelection();
         if (selection.rangeCount > 0) {
             // Store the range for later use
             window.storedRange = selection.getRangeAt(0).cloneRange();
             console.log('Stored range for image insertion');
-            
-            // If there's a selection, highlight it so the user knows where the image will go
-            const selectedText = selection.toString().trim();
-            if (selectedText && !isSourceView) {
-                // Use surroundContents to wrap the selection in a highlight span
-                const range = selection.getRangeAt(0);
-                const highlightSpan = document.createElement('span');
-                highlightSpan.style.backgroundColor = '#FFFF80';
-                
-                try {
-                    // Try to surround the contents with the span
-                    range.surroundContents(highlightSpan);
-                    console.log('Highlighted selected location for image');
-                } catch (e) {
-                    console.error('Could not highlight using surroundContents:', e);
-                    // Fallback - use execCommand to highlight
-                    document.execCommand('hiliteColor', false, '#FFFF80');
-                    console.log('Highlighted selected location using execCommand');
-                }
-            }
-        } else {
-            window.storedRange = null;
-            console.log('No selection range to store for image');
         }
-        
+
         // Clear any previous values
         imageUrl.value = '';
         imageAlt.value = '';
         imageWidth.value = '';
         imageHeight.value = '';
         document.getElementById('image-file').value = '';
-        
+
         // Add file input change handler
         const imageFileInput = document.getElementById('image-file');
-        imageFileInput.addEventListener('change', handleImageFileSelect);
-        
+        imageFileInput.setAttribute('capture', 'environment');
+        imageFileInput.setAttribute('accept', 'image/*');
+        // Prevent keyboard on mobile
+        imageFileInput.setAttribute('readonly', 'readonly');
+        imageFileInput.addEventListener('click', function(e) {
+            // Prevent keyboard on iOS
+            e.preventDefault();
+            // Use a hidden input for actual file selection
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'file';
+            hiddenInput.accept = 'image/*';
+            hiddenInput.capture = 'environment';
+            hiddenInput.style.position = 'absolute';
+            hiddenInput.style.left = '-9999px';
+            document.body.appendChild(hiddenInput);
+            
+            hiddenInput.addEventListener('change', function(e) {
+                handleImageFileSelect(e);
+                document.body.removeChild(hiddenInput);
+            });
+            
+            hiddenInput.click();
+        });
+
         // Add drag and drop functionality
         const dialogContent = imageDialog.querySelector('.dialog-content');
         
@@ -1664,7 +1664,14 @@ document.addEventListener('DOMContentLoaded', function() {
         dropZone.style.borderRadius = '4px';
         dropZone.style.textAlign = 'center';
         dropZone.style.transition = 'all 0.2s ease';
-        dropZone.innerHTML = '<div class="drop-message">Drag and drop an image here</div>';
+        dropZone.style.cursor = 'pointer';
+        dropZone.innerHTML = '<div class="drop-message">Tap to select image or drag and drop here</div>';
+        
+        // Add tap/click handler for mobile
+        dropZone.addEventListener('click', function(e) {
+            e.preventDefault();
+            imageFileInput.click();
+        });
         
         // Style drop message
         const dropMessage = dropZone.querySelector('.drop-message');
@@ -1718,47 +1725,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (files.length > 0) {
                 const file = files[0];
                 if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const base64Data = e.target.result;
-                        // Store the full data URL in base64Storage
-                        const placeholder = base64Storage.add(base64Data);
-                        
-                        // Create image element and insert it
-                        const img = document.createElement('img');
-                        img.src = base64Data;
-                        img.alt = file.name;
-                        
-                        // Wait for image to load to get dimensions
-                        img.onload = function() {
-                            const imgHTML = `<img src="${base64Data}" alt="${file.name}" width="${img.naturalWidth}" height="${img.naturalHeight}">`;
-                            
-                            // Insert the image
-                            if (window.storedRange) {
-                                const selection = window.getSelection();
-                                selection.removeAllRanges();
-                                selection.addRange(window.storedRange);
-                                document.execCommand('delete');
-                                document.execCommand('insertHTML', false, imgHTML);
-                            } else {
-                                document.execCommand('insertHTML', false, imgHTML);
-                            }
-                            
-                            // Save history and clean up
-                            saveHistory();
-                            hideAllDialogs();
-                        };
-                    };
-                    reader.readAsDataURL(file);
+                    handleImageFileSelect({ target: { files: [file] } });
                 } else {
                     showNotification('Please drop an image file', 'error');
                 }
             }
         });
         
-        // Show the dialog and focus URL field
+        // Show the dialog
         imageDialog.style.display = 'flex';
-        imageUrl.focus();
+        
+        // Hide the file input (we'll use the drop zone instead)
+        uploadGroup.style.display = 'none';
     }
 
     // Handle file selection for image upload
@@ -1790,13 +1768,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const testImg = new Image();
             testImg.onload = function() {
                 console.log('Image data URL verified as valid');
+                // Auto-insert the image after successful load
+                insertImage();
             };
             testImg.onerror = function() {
                 console.error('Image data URL verification failed');
+                showNotification('Error loading image. Please try another file.', 'error');
             };
             testImg.src = base64Data;
-            
-            console.log('Image loaded and placeholder created');
         };
         
         reader.onerror = function() {
@@ -4675,6 +4654,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle image click
     function handleImageClick(e) {
+        // Prevent editor focus and default behavior when clicking image
+        e.preventDefault();
+        e.stopPropagation();
+        
         const clickedImage = e.target.closest('img');
         
         // Remove active state from previous image
@@ -4973,7 +4956,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const handles = handleContainer.querySelectorAll('.resize-handle');
         handles.forEach(handle => {
+            // Add both mouse and touch event listeners
             handle.addEventListener('mousedown', (e) => startResize(e, handle));
+            handle.addEventListener('touchstart', (e) => startResize(e, handle));
         });
         
         function startResize(e, handle) {
@@ -4987,21 +4972,31 @@ document.addEventListener('DOMContentLoaded', function() {
             
             isResizing = true;
             activeHandle = handle;
-            startX = e.clientX;
-            startY = e.clientY;
+            
+            // Get coordinates from either mouse or touch event
+            const point = e.touches ? e.touches[0] : e;
+            startX = point.clientX;
+            startY = point.clientY;
             startWidth = activeImage.offsetWidth;
             startHeight = activeImage.offsetHeight;
             
+            // Add both mouse and touch event listeners
             document.addEventListener('mousemove', resize);
+            document.addEventListener('touchmove', resize, { passive: false });
             document.addEventListener('mouseup', stopResize);
+            document.addEventListener('touchend', stopResize);
+            
             e.preventDefault();
+            e.stopPropagation();
         }
         
         function resize(e) {
             if (!isResizing || !activeImage || !activeHandle) return;
             
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
+            // Get coordinates from either mouse or touch event
+            const point = e.touches ? e.touches[0] : e;
+            const dx = point.clientX - startX;
+            const dy = point.clientY - startY;
             
             const handlePos = activeHandle.dataset.handle;
             const aspectRatio = startWidth / startHeight;
@@ -5015,8 +5010,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (handlePos.includes('s')) newHeight = startHeight + dy;
             if (handlePos.includes('n')) newHeight = startHeight - dy;
             
-            // By default maintain aspect ratio, unless Shift is held
-            if (!e.shiftKey) {
+            // By default maintain aspect ratio, unless Shift is held (for mouse events)
+            if (!e.shiftKey || e.touches) {
                 // If it's a corner handle, use the larger change to determine the size
                 if (handlePos.includes('n') || handlePos.includes('s')) {
                     // Vertical handles prioritize height change
@@ -5033,6 +5028,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             activeImage.style.width = `${newWidth}px`;
             activeImage.style.height = `${newHeight}px`;
+            
+            // Prevent page scrolling on touch devices
+            if (e.touches) {
+                e.preventDefault();
+            }
         }
         
         function stopResize() {
@@ -5040,7 +5040,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 isResizing = false;
                 activeHandle = null;
                 document.removeEventListener('mousemove', resize);
+                document.removeEventListener('touchmove', resize);
                 document.removeEventListener('mouseup', stopResize);
+                document.removeEventListener('touchend', stopResize);
                 saveHistory();
             }
         }
@@ -5680,7 +5682,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         .image-wrapper.absolute {
                             position: relative !important;
                             float: left;
-                            margin: 10px;
+                            margin: 0.5em !important;
+                            page-break-inside: avoid;
+                            transform: none !important;
+                        }
+                        /* Preserve image dimensions */
+                        .image-wrapper.absolute img {
+                            max-width: none !important;
+                            width: auto !important;
+                            height: auto !important;
                         }
                     }
                 </style>
@@ -5692,10 +5702,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 <script>
                     // Fix any absolute positioned images for printing
                     document.querySelectorAll('.image-wrapper.absolute').forEach(wrapper => {
-                        const rect = wrapper.getBoundingClientRect();
+                        // Preserve original dimensions
+                        const img = wrapper.querySelector('img');
+                        if (img) {
+                            const computedStyle = window.getComputedStyle(img);
+                            img.style.width = computedStyle.width;
+                            img.style.height = computedStyle.height;
+                        }
+                        
+                        // Convert to relative positioning for print
                         wrapper.style.position = 'relative';
                         wrapper.style.float = 'left';
-                        wrapper.style.margin = '10px';
+                        wrapper.style.margin = '0.5em';
+                        wrapper.style.transform = 'none';
                     });
 
                     // Automatically trigger print when content is loaded

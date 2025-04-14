@@ -6,6 +6,50 @@
     <title>Advanced HTML Editor</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Touch-specific styles */
+        @media (pointer: coarse) {
+            .resize-handle {
+                width: 24px !important;
+                height: 24px !important;
+                margin: -12px;
+                border-radius: 50%;
+                background-color: rgba(255, 255, 255, 0.9) !important;
+                border: 2px solid #0066cc !important;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            }
+            
+            .image-wrapper {
+                -webkit-touch-callout: none;
+                -webkit-user-select: none;
+                user-select: none;
+                touch-action: none;
+            }
+            
+            .image-wrapper img {
+                -webkit-user-drag: none;
+                user-drag: none;
+            }
+            
+            /* Prevent text selection when interacting with images */
+            .image-wrapper::before {
+                content: '';
+                position: absolute;
+                top: -10px;
+                left: -10px;
+                right: -10px;
+                bottom: -10px;
+                z-index: 1;
+            }
+            
+            /* Make toolbar buttons more touch-friendly */
+            .toolbar button {
+                min-width: 40px;
+                min-height: 40px;
+                margin: 2px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="editor-container">
