@@ -1629,6 +1629,116 @@ document.addEventListener('DOMContentLoaded', function() {
         const imageFileInput = document.getElementById('image-file');
         imageFileInput.addEventListener('change', handleImageFileSelect);
         
+        // Add drag and drop functionality
+        const dialogContent = imageDialog.querySelector('.dialog-content');
+        
+        // Remove any existing drop zone
+        const existingDropZone = dialogContent.querySelector('.image-drop-zone');
+        if (existingDropZone) {
+            existingDropZone.remove();
+        }
+        
+        // Create drop zone between Alt text and Or upload image
+        const dropZone = document.createElement('div');
+        dropZone.className = 'image-drop-zone';
+        dropZone.style.margin = '10px 0';
+        dropZone.style.padding = '15px';
+        dropZone.style.border = '2px dashed #ccc';
+        dropZone.style.borderRadius = '4px';
+        dropZone.style.textAlign = 'center';
+        dropZone.style.transition = 'all 0.2s ease';
+        dropZone.innerHTML = '<div class="drop-message">Drag and drop an image here</div>';
+        
+        // Style drop message
+        const dropMessage = dropZone.querySelector('.drop-message');
+        dropMessage.style.color = '#666';
+        dropMessage.style.fontSize = '1em';
+        
+        // Find the Alt text form group and the Or upload image form group
+        const altTextGroup = dialogContent.querySelector('input#image-alt').closest('.form-group');
+        const uploadGroup = dialogContent.querySelector('input#image-file').closest('.form-group');
+        
+        // Insert dropZone between them
+        altTextGroup.parentNode.insertBefore(dropZone, uploadGroup);
+        
+        // Add drag and drop event listeners
+        dropZone.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.style.borderColor = '#2daadb';
+            dropZone.style.backgroundColor = 'rgba(45, 170, 219, 0.1)';
+        });
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.style.borderColor = '#2daadb';
+            dropZone.style.backgroundColor = 'rgba(45, 170, 219, 0.1)';
+        });
+        
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = dropZone.getBoundingClientRect();
+            if (
+                e.clientX < rect.left ||
+                e.clientX >= rect.right ||
+                e.clientY < rect.top ||
+                e.clientY >= rect.bottom
+            ) {
+                dropZone.style.borderColor = '#ccc';
+                dropZone.style.backgroundColor = 'transparent';
+            }
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.style.borderColor = '#ccc';
+            dropZone.style.backgroundColor = 'transparent';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const base64Data = e.target.result;
+                        // Store the full data URL in base64Storage
+                        const placeholder = base64Storage.add(base64Data);
+                        
+                        // Create image element and insert it
+                        const img = document.createElement('img');
+                        img.src = base64Data;
+                        img.alt = file.name;
+                        
+                        // Wait for image to load to get dimensions
+                        img.onload = function() {
+                            const imgHTML = `<img src="${base64Data}" alt="${file.name}" width="${img.naturalWidth}" height="${img.naturalHeight}">`;
+                            
+                            // Insert the image
+                            if (window.storedRange) {
+                                const selection = window.getSelection();
+                                selection.removeAllRanges();
+                                selection.addRange(window.storedRange);
+                                document.execCommand('delete');
+                                document.execCommand('insertHTML', false, imgHTML);
+                            } else {
+                                document.execCommand('insertHTML', false, imgHTML);
+                            }
+                            
+                            // Save history and clean up
+                            saveHistory();
+                            hideAllDialogs();
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    showNotification('Please drop an image file', 'error');
+                }
+            }
+        });
+        
         // Show the dialog and focus URL field
         imageDialog.style.display = 'flex';
         imageUrl.focus();
