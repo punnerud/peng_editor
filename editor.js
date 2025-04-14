@@ -371,24 +371,35 @@ document.addEventListener('DOMContentLoaded', function() {
         if (savedContent) {
             editor.innerHTML = savedContent;
             // Show notification with Clear All button
-            const notification = showNotification('Previous content has been restored', 'info', true);
+            const initialNotification = showNotification('Previous content has been restored', 'info', true);
             
             // Add Clear All button to the notification
-            if (notification) {
+            if (initialNotification) {
                 const clearBtn = document.createElement('button');
                 clearBtn.className = 'notification-action-btn';
                 clearBtn.textContent = 'Clear All';
                 clearBtn.addEventListener('click', function() {
                     clearAllContent();
-                    dismissNotification(notification);
+                    dismissNotification(initialNotification);
                 });
                 
                 // Add button to notification content
-                const notificationContent = notification.querySelector('.notification-content');
+                const notificationContent = initialNotification.querySelector('.notification-content');
                 if (notificationContent) {
                     notificationContent.appendChild(clearBtn);
                 }
             }
+
+            // Set up one-time event listener for first edit
+            const handleFirstEdit = () => {
+                setTimeout(() => {
+                    if (initialNotification) {
+                        dismissNotification(initialNotification);
+                    }
+                }, 2000);
+                editor.removeEventListener('input', handleFirstEdit);
+            };
+            editor.addEventListener('input', handleFirstEdit);
         }
         
         // Setup auto-save to localStorage
@@ -491,6 +502,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function setupEventListeners() {
         // Add event listener for the pipette button
         pipetteBtn.addEventListener('click', togglePipette);
+        
+        // Add movement button event listeners
+        document.getElementById('move-left-btn').addEventListener('click', () => moveSelection('left'));
+        document.getElementById('move-up-btn').addEventListener('click', () => moveSelection('up'));
+        document.getElementById('move-down-btn').addEventListener('click', () => moveSelection('down'));
+        document.getElementById('move-right-btn').addEventListener('click', () => moveSelection('right'));
         
         // Initial click handler to handle the first click properly
         editor.addEventListener('click', function initialClickHandler(e) {
@@ -5696,4 +5713,90 @@ document.addEventListener('DOMContentLoaded', function() {
         
         printWindow.document.close();
     }
+
+    // Function to move selected content
+    function moveSelection(direction) {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+
+        const range = selection.getRangeAt(0);
+        if (!editor.contains(range.commonAncestorContainer)) return;
+
+        // Get the selected content
+        const selectedContent = range.extractContents();
+        const tempDiv = document.createElement('div');
+        tempDiv.appendChild(selectedContent);
+
+        // Get current position
+        const rects = range.getClientRects();
+        if (!rects.length) return;
+        const currentRect = rects[0];
+
+        // Calculate new position
+        let x = currentRect.left;
+        let y = currentRect.top;
+        const step = direction === 'up' || direction === 'down' ? currentRect.height : 10;
+
+        switch (direction) {
+            case 'left': x -= step; break;
+            case 'right': x += step; break;
+            case 'up': y -= step; break;
+            case 'down': y += step; break;
+        }
+
+        // Find element at new position
+        const target = document.elementFromPoint(x, y);
+        if (!target || !editor.contains(target)) {
+            // If no valid target, put content back at original position
+            range.insertNode(tempDiv);
+            return;
+        }
+
+        // Create new range at target position
+        const newRange = document.createRange();
+        if (target.nodeType === Node.TEXT_NODE) {
+            newRange.setStart(target, 0);
+        } else {
+            const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null, false);
+            const textNode = walker.firstChild();
+            if (textNode) {
+                newRange.setStart(textNode, 0);
+            } else {
+                newRange.setStart(target, 0);
+            }
+        }
+        newRange.collapse(true);
+
+        // Insert content at new position
+        newRange.insertNode(tempDiv);
+
+        // Select the moved content
+        newRange.selectNode(tempDiv.firstChild);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+
+        // Save the change to history
+        saveHistory();
+    }
+
+    // Function to update movement buttons visibility
+    function updateMovementButtonsVisibility() {
+        const selection = window.getSelection();
+        const selectionControls = document.querySelector('.selection-controls');
+        
+        if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            if (editor.contains(range.commonAncestorContainer)) {
+                selectionControls.style.display = 'flex';
+                return;
+            }
+        }
+        
+        selectionControls.style.display = 'none';
+    }
+
+    // Add selection change event listener for movement buttons
+    document.addEventListener('selectionchange', updateMovementButtonsVisibility);
+    editor.addEventListener('mouseup', updateMovementButtonsVisibility);
+    editor.addEventListener('keyup', updateMovementButtonsVisibility);
 }); 

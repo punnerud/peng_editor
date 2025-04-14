@@ -1260,4 +1260,49 @@ body {
 
 .crop-controls button:hover {
     opacity: 0.9;
+}
+
+/* Selection movement controls */
+.selection-controls {
+    display: none; /* Hidden by default */
+    border-left: 1px solid #ddd;
+    margin-left: 5px;
+}
+
+.selection-controls button {
+    padding: 8px 10px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.selection-controls button:hover {
+    background-color: #f0f0f0;
+}
+
+.selection-controls button:active {
+    background-color: #e0e0e0;
+    transform: scale(0.95);
+}
+
+.selection-controls button i {
+    font-size: 14px;
+    color: #666;
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+    .selection-controls {
+        margin-left: 2px;
+    }
+
+    .selection-controls button {
+        padding: 6px 8px;
+    }
+
+    .selection-controls button i {
+        font-size: 12px;
+    }
 } 
