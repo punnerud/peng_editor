@@ -370,6 +370,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const savedContent = localStorage.getItem('editorContent');
         if (savedContent) {
             editor.innerHTML = savedContent;
+            // Reapply draggable to floating images
+            reapplyDraggableToFloatingImages();
+            
             // Show notification with Clear All button
             const initialNotification = showNotification('Previous content has been restored', 'info', true);
             
@@ -3168,6 +3171,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     editor.innerHTML = bodyContent;
                 }
                 
+                // Reapply draggable to floating images
+                reapplyDraggableToFloatingImages();
+                
                 // Update word count and history
                 updateWordCount();
                 saveHistory();
@@ -5603,97 +5609,49 @@ document.addEventListener('DOMContentLoaded', function() {
                 <style>
                     @page {
                         size: ${pageWidth === 'none' ? 'auto' : pageWidth + ' portrait'};
-                        margin: 20mm;
+                        margin: 0;
                     }
                     body {
                         font-family: Arial, sans-serif;
                         line-height: 1.2;
                         margin: 0;
+                        padding: 0;
                         color: #000;
                         background: white;
                     }
                     .content-wrapper {
                         ${currentPageDims ? `
                             width: ${currentPageDims.width};
-                            margin: 0 auto;
+                            margin: 0;
                             background: white;
                             position: relative;
                             box-sizing: border-box;
-                            padding: 20px;
+                            padding: 0;
                         ` : `
-                            margin: 20px;
+                            margin: 0;
                         `}
-                        /* Editor-like text rendering */
-                        white-space: pre-wrap;
-                        word-wrap: break-word;
-                        word-break: break-word;
-                        overflow-wrap: break-word;
-                    }
-                    /* Reset paragraph spacing */
-                    .content-wrapper p {
-                        margin: 0;
-                        padding: 0;
-                        min-height: 1.2em;
-                    }
-                    /* Handle empty paragraphs */
-                    .content-wrapper p:empty::after {
-                        content: '\\200B'; /* Zero-width space */
-                    }
-                    /* Preserve spaces and tabs */
-                    .content-wrapper pre {
-                        white-space: pre-wrap;
-                        word-wrap: break-word;
-                        font-family: monospace;
-                        margin: 0;
+                        position: relative;
                     }
                     img {
-                        max-width: 100%;
-                        height: auto;
-                        vertical-align: middle;
-                    }
-                    /* Image wrapper styles */
-                    .image-wrapper {
-                        display: inline-block;
                         position: relative;
+                        page-break-inside: avoid;
+                    }
+                    .image-wrapper {
+                        break-inside: avoid;
+                        page-break-inside: avoid;
                     }
                     .image-wrapper.absolute {
                         position: absolute;
                     }
-                    /* Image alignment container */
-                    .image-align-container {
-                        display: block;
-                        text-align: inherit;
-                    }
                     @media print {
-                        body {
-                            margin: 0;
-                            padding: 0;
-                        }
                         .content-wrapper {
-                            margin: 0 auto;
-                            padding: 0;
+                            position: relative;
+                            height: 100%;
                             width: 100%;
                         }
-                        img {
+                        .image-wrapper {
+                            position: absolute;
                             page-break-inside: avoid;
-                        }
-                        h1, h2, h3, h4, h5, h6 {
-                            page-break-after: avoid;
-                            margin: 0.5em 0;
-                        }
-                        /* Ensure floating images print correctly */
-                        .image-wrapper.absolute {
-                            position: relative !important;
-                            float: left;
-                            margin: 0.5em !important;
-                            page-break-inside: avoid;
-                            transform: none !important;
-                        }
-                        /* Preserve image dimensions */
-                        .image-wrapper.absolute img {
-                            max-width: none !important;
-                            width: auto !important;
-                            height: auto !important;
                         }
                     }
                 </style>
@@ -5703,27 +5661,43 @@ document.addEventListener('DOMContentLoaded', function() {
                     ${content}
                 </div>
                 <script>
-                    // Fix any absolute positioned images for printing
-                    document.querySelectorAll('.image-wrapper.absolute').forEach(wrapper => {
-                        // Preserve original dimensions
+                    // Preserve exact image positions and dimensions for printing
+                    document.querySelectorAll('.image-wrapper').forEach(function(wrapper) {
                         const img = wrapper.querySelector('img');
-                        if (img) {
-                            const computedStyle = window.getComputedStyle(img);
-                            img.style.width = computedStyle.width;
-                            img.style.height = computedStyle.height;
+                        if (!img) {
+                            return;
                         }
                         
-                        // Convert to relative positioning for print
-                        wrapper.style.position = 'relative';
-                        wrapper.style.float = 'left';
-                        wrapper.style.margin = '0.5em';
-                        wrapper.style.transform = 'none';
+                        const rect = wrapper.getBoundingClientRect();
+                        const container = wrapper.closest('.content-wrapper');
+                        if (!container) {
+                            return;
+                        }
+                        
+                        const containerRect = container.getBoundingClientRect();
+                        const computedStyle = window.getComputedStyle(img);
+                        
+                        // Calculate position relative to content wrapper
+                        const top = rect.top - containerRect.top;
+                        const left = rect.left - containerRect.left;
+                        
+                        // Set exact dimensions and position
+                        wrapper.style.position = 'absolute';
+                        wrapper.style.top = top + 'px';
+                        wrapper.style.left = left + 'px';
+                        wrapper.style.width = rect.width + 'px';
+                        wrapper.style.height = rect.height + 'px';
+                        
+                        // Preserve original image dimensions
+                        img.style.width = computedStyle.width;
+                        img.style.height = computedStyle.height;
+                        img.style.maxWidth = 'none';
+                        img.style.maxHeight = 'none';
                     });
 
-                    // Automatically trigger print when content is loaded
+                    // Automatically trigger print
                     window.onload = function() {
                         window.print();
-                        // Close the window after printing (for most browsers)
                         setTimeout(function() {
                             window.close();
                         }, 500);
@@ -5842,4 +5816,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, { passive: false });
     });
+
+    // Function to reapply draggable to floating images
+    function reapplyDraggableToFloatingImages() {
+        const floatingImages = editor.querySelectorAll('.image-wrapper.absolute');
+        floatingImages.forEach(wrapper => {
+            makeWrapperDraggable(wrapper);
+        });
+    }
 }); 

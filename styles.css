@@ -107,7 +107,7 @@ body {
     min-height: 300px;
     display: flex;
     justify-content: center;
-    padding: 0 35px;
+    padding: 0;
     width: 100%;
 }
 
@@ -118,14 +118,25 @@ body {
     overflow-y: auto;
     background-color: #fff;
     border: none;
-    width: 100%;
-    max-width: 210mm; /* Default to A4 width */
-    margin: 0;
+    width: 210mm; /* Default to A4 width */
+    margin: 0 auto;
+    position: relative;
+}
+
+#editor::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -9999px;
+    bottom: 0;
+    left: 100%;
+    background: #fff;
+    z-index: -1;
 }
 
 /* Remove max-width when no width limit is selected */
 #editor.no-width-limit {
-    max-width: none;
+    width: 100%;
 }
 
 #html-source {
