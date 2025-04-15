@@ -1793,8 +1793,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function insertImage() {
         let url = imageUrl.value.trim();
         const alt = imageAlt.value.trim();
-        const width = imageWidth.value.trim();
-        const height = imageHeight.value.trim();
+        let width = imageWidth.value.trim() || '150'; // Set default width to 150px
+        let height = imageHeight.value.trim() || '150'; // Set default height to 150px
         
         // Check if we have a BASE64 image
         if (imageUrl.dataset.base64) {
@@ -1805,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Image insertion - Alt: ${alt}, Width: ${width}, Height: ${height}`);
         
         if (url) {
-            const imgHTML = `<img src="${url}" alt="${alt}"${width ? ` width="${width}"` : ''}${height ? ` height="${height}"` : ''}>`;
+            const imgHTML = `<img src="${url}" alt="${alt}" width="${width}" height="${height}">`;
             
             if (isSourceView) {
                 insertAtCursor(htmlSource, imgHTML);
@@ -5454,9 +5454,12 @@ document.addEventListener('DOMContentLoaded', function() {
         wrapper.style.cursor = '';
         wrapper.classList.remove('absolute');
         
-        // Remove draggable functionality if it exists
+        // Remove all drag event listeners if they exist
         if (activeImageDragHandler) {
-            wrapper.removeEventListener('mousedown', activeImageDragHandler);
+            wrapper.removeEventListener('mousedown', activeImageDragHandler.mousedown);
+            wrapper.removeEventListener('touchstart', activeImageDragHandler.touchstart);
+            wrapper.removeEventListener('touchmove', activeImageDragHandler.touchmove);
+            wrapper.removeEventListener('touchend', activeImageDragHandler.touchend);
             activeImageDragHandler = null;
         }
         
@@ -5496,10 +5499,11 @@ document.addEventListener('DOMContentLoaded', function() {
         let isDragging = false;
         let startX, startY;
         let startPosX, startPosY;
+        let lastTouchX, lastTouchY;
         
         wrapper.style.cursor = 'move';
         
-        // Create the startDrag function
+        // Create the startDrag function for mouse events
         function startDrag(e) {
             // Only handle primary button (usually left click)
             if (e.button !== 0) return;
@@ -5515,6 +5519,45 @@ document.addEventListener('DOMContentLoaded', function() {
             
             document.addEventListener('mousemove', drag);
             document.addEventListener('mouseup', stopDrag);
+            
+            e.preventDefault();
+        }
+        
+        // Touch event handlers
+        function handleTouchStart(e) {
+            if (e.touches.length !== 1) return;
+            
+            // Don't start drag if touching resize handle
+            if (e.target.classList.contains('resize-handle')) return;
+            
+            isDragging = true;
+            const touch = e.touches[0];
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+            startPosX = parseInt(wrapper.style.left) || 0;
+            startPosY = parseInt(wrapper.style.top) || 0;
+            
+            e.preventDefault(); // Prevent scrolling while dragging
+        }
+        
+        function handleTouchMove(e) {
+            if (!isDragging || e.touches.length !== 1) return;
+            
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - lastTouchX;
+            const deltaY = touch.clientY - lastTouchY;
+            
+            wrapper.style.left = (startPosX + deltaX) + 'px';
+            wrapper.style.top = (startPosY + deltaY) + 'px';
+            
+            e.preventDefault(); // Prevent scrolling while dragging
+        }
+        
+        function handleTouchEnd(e) {
+            if (!isDragging) return;
+            
+            isDragging = false;
+            saveHistory();
             
             e.preventDefault();
         }
@@ -5538,9 +5581,19 @@ document.addEventListener('DOMContentLoaded', function() {
             saveHistory();
         }
         
-        // Store the startDrag handler for later removal
-        activeImageDragHandler = startDrag;
-        wrapper.addEventListener('mousedown', activeImageDragHandler);
+        // Store the event handlers for later removal
+        activeImageDragHandler = {
+            mousedown: startDrag,
+            touchstart: handleTouchStart,
+            touchmove: handleTouchMove,
+            touchend: handleTouchEnd
+        };
+        
+        // Add all event listeners
+        wrapper.addEventListener('mousedown', activeImageDragHandler.mousedown);
+        wrapper.addEventListener('touchstart', activeImageDragHandler.touchstart);
+        wrapper.addEventListener('touchmove', activeImageDragHandler.touchmove);
+        wrapper.addEventListener('touchend', activeImageDragHandler.touchend);
     }
 
     // Add new function to update alignment buttons state
@@ -5605,7 +5658,8 @@ document.addEventListener('DOMContentLoaded', function() {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Print Document</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Print Preview</title>
                 <style>
                     @page {
                         size: ${pageWidth === 'none' ? 'auto' : pageWidth + ' portrait'};
@@ -5635,23 +5689,56 @@ document.addEventListener('DOMContentLoaded', function() {
                     img {
                         position: relative;
                         page-break-inside: avoid;
+                        max-width: 100% !important;
+                        height: auto !important;
+                        width: auto !important;
                     }
                     .image-wrapper {
                         break-inside: avoid;
                         page-break-inside: avoid;
+                        max-width: 100% !important;
                     }
                     .image-wrapper.absolute {
                         position: absolute;
                     }
                     @media print {
+                        html, body {
+                            width: 100% !important;
+                            height: 100% !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                        }
                         .content-wrapper {
                             position: relative;
                             height: 100%;
-                            width: 100%;
+                            width: 100% !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
                         }
                         .image-wrapper {
-                            position: absolute;
+                            position: relative;
                             page-break-inside: avoid;
+                            max-width: 100% !important;
+                        }
+                        img {
+                            max-width: 100% !important;
+                            height: auto !important;
+                            width: auto !important;
+                        }
+                    }
+                    @media only screen and (max-width: 768px) {
+                        .content-wrapper {
+                            width: 100% !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                        }
+                        img {
+                            max-width: 100% !important;
+                            height: auto !important;
+                            width: auto !important;
+                        }
+                        .image-wrapper {
+                            max-width: 100% !important;
                         }
                     }
                 </style>
@@ -5660,49 +5747,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="content-wrapper">
                     ${content}
                 </div>
-                <script>
-                    // Preserve exact image positions and dimensions for printing
-                    document.querySelectorAll('.image-wrapper').forEach(function(wrapper) {
-                        const img = wrapper.querySelector('img');
-                        if (!img) {
-                            return;
-                        }
-                        
-                        const rect = wrapper.getBoundingClientRect();
-                        const container = wrapper.closest('.content-wrapper');
-                        if (!container) {
-                            return;
-                        }
-                        
-                        const containerRect = container.getBoundingClientRect();
-                        const computedStyle = window.getComputedStyle(img);
-                        
-                        // Calculate position relative to content wrapper
-                        const top = rect.top - containerRect.top;
-                        const left = rect.left - containerRect.left;
-                        
-                        // Set exact dimensions and position
-                        wrapper.style.position = 'absolute';
-                        wrapper.style.top = top + 'px';
-                        wrapper.style.left = left + 'px';
-                        wrapper.style.width = rect.width + 'px';
-                        wrapper.style.height = rect.height + 'px';
-                        
-                        // Preserve original image dimensions
-                        img.style.width = computedStyle.width;
-                        img.style.height = computedStyle.height;
-                        img.style.maxWidth = 'none';
-                        img.style.maxHeight = 'none';
-                    });
-
-                    // Automatically trigger print
-                    window.onload = function() {
-                        window.print();
-                        setTimeout(function() {
-                            window.close();
-                        }, 500);
-                    };
-                </script>
             </body>
             </html>
         `);
