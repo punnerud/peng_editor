@@ -5539,25 +5539,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Add new function to update alignment buttons state
     function updateAlignmentButtonsState() {
+        // Check if activeImage exists
+        if (!activeImage) return;
+
         const wrapper = activeImage.closest('.image-wrapper');
         if (!wrapper || wrapper.classList.contains('absolute')) return;
-        
+
         // Get all alignment buttons
         const alignButtons = {
-            left: document.querySelector('#justify-left-btn'),
-            center: document.querySelector('#justify-center-btn'),
-            right: document.querySelector('#justify-right-btn'),
-            full: document.querySelector('#justify-full-btn')
+            left: document.getElementById('justify-left-btn'),
+            center: document.getElementById('justify-center-btn'),
+            right: document.getElementById('justify-right-btn'),
+            full: document.getElementById('justify-full-btn')
         };
-        
+
         // Remove active state from all buttons
         Object.values(alignButtons).forEach(btn => {
             if (btn) btn.classList.remove('active');
         });
-        
+
         // Get current alignment
         const textAlign = wrapper.style.textAlign;
-        
+
         // Update corresponding button
         if (alignButtons[textAlign]) {
             alignButtons[textAlign].classList.add('active');
@@ -5818,4 +5821,25 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('selectionchange', updateMovementButtonsVisibility);
     editor.addEventListener('mouseup', updateMovementButtonsVisibility);
     editor.addEventListener('keyup', updateMovementButtonsVisibility);
+
+    // Add touch event handlers for mobile
+    document.addEventListener('DOMContentLoaded', function() {
+        // ... existing DOMContentLoaded code ...
+        
+        // Add touch events for images
+        editor.addEventListener('touchstart', function(e) {
+            const clickedImage = e.target.closest('img');
+            if (clickedImage) {
+                e.preventDefault(); // Prevent zoom/scroll
+                handleImageClick(e);
+            }
+        }, { passive: false });
+        
+        editor.addEventListener('touchend', function(e) {
+            const clickedImage = e.target.closest('img');
+            if (clickedImage) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    });
 }); 

@@ -298,43 +298,72 @@ body {
 /* Mobile styles */
 @media (max-width: 768px) {
     body {
-        padding: 10px;
+        padding: 0;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .editor-container {
+        max-width: none;
+        width: 100vw;
+        margin: 0;
+        border-radius: 0;
+        overflow: hidden;
+        padding-top: 44px; /* Only add padding on mobile */
     }
 
     .toolbar-container {
-        max-height: calc(40px * 2); /* Show 2 rows on mobile */
-        overflow-y: auto;
-        scrollbar-width: none; /* Firefox */
-        -ms-overflow-style: none; /* IE and Edge */
+        position: fixed; /* Fixed position only on mobile */
+        width: 100vw;
+        max-height: 44px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 0;
+        white-space: nowrap;
+        top: 0;
+        left: 0;
+        right: 0;
+        border-radius: 0;
+    }
+
+    .toolbar {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        min-width: max-content;
+        width: auto;
+        padding: 5px;
+        gap: 2px;
+    }
+
+    .toolbar-group {
+        padding: 2px 4px;
+        min-height: 36px;
+    }
+
+    .editor-main {
+        padding: 0 10px;
+        overflow-x: auto;
+        min-width: 210mm; /* Preserve A4 width */
+        width: 100vw;
+    }
+
+    #editor {
+        min-width: 210mm; /* Preserve A4 width */
+        padding: 10px;
+        margin: 0;
+    }
+
+    .editor-footer {
+        width: 100vw;
+        padding: 5px;
+        overflow-x: auto;
+        white-space: nowrap;
     }
 
     .toolbar-container::-webkit-scrollbar {
         display: none; /* Chrome, Safari, Opera */
-    }
-
-    .toolbar {
-        flex-wrap: nowrap;
-        min-width: max-content;
-        padding: 5px;
-    }
-
-    .toolbar-group {
-        padding: 0 3px;
-    }
-
-    .toolbar button {
-        padding: 3px 6px;
-        font-size: 12px;
-    }
-
-    .toolbar select, .toolbar input {
-        height: 26px;
-        font-size: 12px;
-    }
-
-    .toolbar input[type="color"] {
-        width: 26px;
-        height: 26px;
     }
 
     .dialog-content {
