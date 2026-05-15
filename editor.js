@@ -6003,9 +6003,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Re-select the moved blocks so the user can chain another move.
+        // Using selectNodeContents (rather than setStartBefore/setEndAfter)
+        // keeps the range's containers inside firstBlock / lastBlock —
+        // otherwise the next call would see range.startContainer === editor
+        // and nearestBlock() would walk up to nothing, making the arrow
+        // appear to do nothing.
         const newRange = document.createRange();
-        newRange.setStartBefore(firstBlock);
-        newRange.setEndAfter(lastBlock);
+        newRange.selectNodeContents(firstBlock);
+        if (lastBlock !== firstBlock) {
+            const endRef = document.createRange();
+            endRef.selectNodeContents(lastBlock);
+            newRange.setEnd(endRef.endContainer, endRef.endOffset);
+        }
         selection.removeAllRanges();
         selection.addRange(newRange);
         savedMoveRange = newRange.cloneRange();
@@ -6367,6 +6376,17 @@ document.addEventListener('DOMContentLoaded', function() {
             editLabel.textContent = isDrawing(img) ? 'Rediger tegning' : 'Rediger bilde';
             panel.classList.add('visible');
             positionPanel(img);
+            // Replace any earlier text selection with the image (or its
+            // wrapper) so the move arrows actually target this image and not
+            // the stale text the user had highlighted before clicking.
+            try {
+                const target = img.closest('.image-wrapper') || img;
+                const r = document.createRange();
+                r.selectNode(target);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(r);
+            } catch (err) {}
         }
 
         function hide() {
