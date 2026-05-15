@@ -143,8 +143,8 @@
         </div>
         
         <div class="editor-main">
-            <div id="editor" contenteditable="true">
-                <p>Start typing your content here...</p>
+            <div id="editor" contenteditable="true" data-placeholder="Start å skrive..." autofocus>
+                <p><br></p>
             </div>
             <textarea id="html-source" style="display: none;"></textarea>
         </div>
@@ -316,6 +316,10 @@
                         <span id="drawing-size-label">4</span>
                     </div>
                     <div class="drawing-tool-group">
+                        <label class="drawing-lock-toggle" title="Hold tegne-modus alltid på (mellomrom toggler)">
+                            <input type="checkbox" id="drawing-autodraw-toggle">
+                            <i class="fas fa-thumbtack"></i>
+                        </label>
                         <button type="button" id="drawing-undo-btn" title="Angre"><i class="fas fa-undo"></i></button>
                         <button type="button" id="drawing-clear-btn" title="Tøm"><i class="fas fa-trash"></i></button>
                     </div>

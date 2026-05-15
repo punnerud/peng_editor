@@ -134,6 +134,21 @@ body {
     z-index: -1;
 }
 
+/* Placeholder text: shown when the editor has no real content. The class is
+   toggled by JS (an empty <p><br></p> still counts as visually empty), and
+   the overlay sits above the empty paragraph but doesn't block typing. */
+#editor.is-empty::before {
+    content: attr(data-placeholder);
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    color: #b3b3b3;
+    font-style: italic;
+    pointer-events: none;
+    user-select: none;
+}
+
 /* Remove max-width when no width limit is selected */
 #editor.no-width-limit {
     width: 100%;
@@ -1593,6 +1608,35 @@ body {
 }
 
 .drawing-toolbar .drawing-tool.active {
+    background-color: #2daadb;
+    color: #fff;
+    border-color: #1a8fbf;
+}
+
+/* Auto-draw toggle — "pinned" tool keeps the stroke alive while the mouse
+   moves over the canvas. Space toggles it. */
+.drawing-lock-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background-color: #f4f4f4;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+    margin: 0;
+    font-size: 14px;
+    min-width: 36px;
+}
+
+.drawing-lock-toggle input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.drawing-lock-toggle.active {
     background-color: #2daadb;
     color: #fff;
     border-color: #1a8fbf;

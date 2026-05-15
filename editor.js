@@ -309,7 +309,28 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add after editor state variables
     let activeImageDragHandler = null;
-    
+
+    // ===== Placeholder tracking =====
+    // Toggles the .is-empty class so the CSS placeholder shows only when the
+    // editor genuinely contains nothing meaningful (an empty <p><br></p> still
+    // counts as visually empty). A MutationObserver catches every change,
+    // including undo/redo, file load, and source-view toggles.
+    function isEditorVisuallyEmpty() {
+        const text = editor.textContent.replace(/​/g, '').trim();
+        if (text.length > 0) return false;
+        if (editor.querySelector('img, table, video, iframe, audio, canvas')) return false;
+        return true;
+    }
+    function refreshEditorPlaceholder() {
+        editor.classList.toggle('is-empty', isEditorVisuallyEmpty());
+    }
+    new MutationObserver(refreshEditorPlaceholder).observe(editor, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+    });
+    editor.addEventListener('blur', refreshEditorPlaceholder);
+
     // Initialize editor
     initEditor();
     
@@ -338,24 +359,26 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         document.head.appendChild(editorStyles);
 
-        // Remove default content if editor is empty or just contains placeholder
-        if (editor.innerHTML.trim() === '' || 
-            editor.innerHTML.includes('Start typing your content here')) {
-            // Insert a paragraph to ensure proper editing
-            editor.innerHTML = '<p>Start typing your content here...</p>';
-            
-            // Position cursor at the beginning of the paragraph
-            const selection = window.getSelection();
-            const range = document.createRange();
+        // Normalise the initial editor state — replace the legacy placeholder
+        // paragraph with an empty one so the CSS placeholder (data-placeholder)
+        // can show through. Then place the caret inside so the user can start
+        // typing immediately.
+        if (editor.innerHTML.trim() === '' ||
+            editor.innerHTML.includes('Start typing your content here') ||
+            editor.innerHTML.includes('Start å skrive')) {
+            editor.innerHTML = '<p><br></p>';
             const firstParagraph = editor.querySelector('p');
-            
-            if (firstParagraph && firstParagraph.firstChild) {
-                range.setStart(firstParagraph.firstChild, 0);
+            if (firstParagraph) {
+                const range = document.createRange();
+                range.selectNodeContents(firstParagraph);
                 range.collapse(true);
+                const selection = window.getSelection();
                 selection.removeAllRanges();
                 selection.addRange(range);
             }
         }
+
+        refreshEditorPlaceholder();
         
         // Initial content
         updateWordCount();
@@ -404,9 +427,27 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             editor.addEventListener('input', handleFirstEdit);
         }
-        
+
         // Setup auto-save to localStorage
         setupAutoSave();
+
+        // Make sure the placeholder reflects the loaded state, and give the
+        // editor focus so the user can start typing right away.
+        refreshEditorPlaceholder();
+        try {
+            editor.focus();
+            if (isEditorVisuallyEmpty()) {
+                const firstP = editor.querySelector('p');
+                if (firstP) {
+                    const r = document.createRange();
+                    r.selectNodeContents(firstP);
+                    r.collapse(true);
+                    const s = window.getSelection();
+                    s.removeAllRanges();
+                    s.addRange(r);
+                }
+            }
+        } catch (err) {}
     }
     
     // Set up the pipette button
@@ -518,25 +559,8 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('move-down-btn').addEventListener('click', () => moveSelection('down'));
         document.getElementById('move-right-btn').addEventListener('click', () => moveSelection('right'));
         
-        // Initial click handler to handle the first click properly
-        editor.addEventListener('click', function initialClickHandler(e) {
-            // Select all text in the editor on first click if it's the placeholder text
-            if (editor.textContent.trim() === 'Start typing your content here...') {
-                // Create a range for the entire content
-                const range = document.createRange();
-                range.selectNodeContents(editor.firstChild);
-                
-                // Apply the selection
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
-                
-                console.log('Selected all placeholder text on first click');
-                
-                // Remove this event listener after first use
-                editor.removeEventListener('click', initialClickHandler);
-            }
-        });
+        // (Legacy "select-all-on-first-click" handler removed — the new CSS
+        // placeholder doesn't need it.)
         
         // Add a general click handler to remove the drag handle when clicking elsewhere in the editor
         editor.addEventListener('mousedown', function(e) {
@@ -6191,6 +6215,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const titleEl = document.getElementById('drawing-dialog-title');
         const closeBtnDraw = drawingDialog.querySelector('.close-dialog');
         const resizeHandles = drawingDialog.querySelectorAll('.canvas-resize-handle');
+        const autoDrawCheckbox = document.getElementById('drawing-autodraw-toggle');
+        const autoDrawLabel = autoDrawCheckbox ? autoDrawCheckbox.closest('.drawing-lock-toggle') : null;
 
         let currentTool = 'brush';
         let spaceDrawing = false; // true while Space is held: stroke follows the cursor
@@ -6235,6 +6261,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     brushCursor.classList.remove('visible');
                 }
+            }
+            // Auto-draw only applies to brush/eraser — silently disable it
+            // when the user picks line/rect/circle/fill so it doesn't appear
+            // stuck on after a tool switch.
+            if (tool !== 'brush' && tool !== 'eraser' && autoDrawCheckbox && autoDrawCheckbox.checked) {
+                autoDrawCheckbox.checked = false;
+                if (autoDrawLabel) autoDrawLabel.classList.remove('active');
+                endSpaceStroke();
             }
         }
 
@@ -6414,6 +6448,8 @@ document.addEventListener('DOMContentLoaded', function() {
             sizeLabel.textContent = currentSize;
             isDirty = false;
             spaceDrawing = false;
+            if (autoDrawCheckbox) autoDrawCheckbox.checked = false;
+            if (autoDrawLabel) autoDrawLabel.classList.remove('active');
             drawingDialog.style.display = 'flex';
             // Sync the brush preview to the new canvas dimensions
             updateBrushCursorSize();
@@ -6425,6 +6461,8 @@ document.addEventListener('DOMContentLoaded', function() {
             drawingHistory = [];
             isDirty = false;
             spaceDrawing = false;
+            if (autoDrawCheckbox) autoDrawCheckbox.checked = false;
+            if (autoDrawLabel) autoDrawLabel.classList.remove('active');
             if (brushCursor) brushCursor.classList.remove('visible');
         }
 
@@ -6619,11 +6657,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update cursor when size or tool changes
         sizeInput.addEventListener('input', updateBrushCursorSize);
 
-        // === Space = "hold to draw" with the active tool ===
-        // While Space is held, the canvas draws/erases continuously at the
-        // current mouse position with the active tool. Releasing Space ends
-        // the stroke. Saves the user from holding the mouse button down on a
-        // touchpad.
+        // === Auto-draw mode (pinned tool) ===
+        // The checkbox in the toolbar locks the active tool "on": as long as
+        // it's checked, moving the cursor over the canvas keeps drawing/
+        // erasing — no need to hold the mouse button. Space toggles it on/off.
         function startSpaceStroke() {
             if (!lastCanvasPointer) return;
             if (isDrawing || spaceDrawing) return;
@@ -6649,14 +6686,54 @@ document.addEventListener('DOMContentLoaded', function() {
             isDrawing = false;
         }
 
+        function isAutoDrawOn() {
+            return autoDrawCheckbox && autoDrawCheckbox.checked;
+        }
+
+        function syncAutoDrawState() {
+            const on = isAutoDrawOn();
+            if (autoDrawLabel) autoDrawLabel.classList.toggle('active', on);
+            if (on) {
+                if (currentTool !== 'brush' && currentTool !== 'eraser') {
+                    // Only brush/eraser supports auto-draw; quietly turn off
+                    autoDrawCheckbox.checked = false;
+                    if (autoDrawLabel) autoDrawLabel.classList.remove('active');
+                    return;
+                }
+                startSpaceStroke();
+            } else {
+                endSpaceStroke();
+            }
+        }
+
+        if (autoDrawCheckbox) {
+            autoDrawCheckbox.addEventListener('change', syncAutoDrawState);
+        }
+
+        // If the pointer leaves and re-enters the canvas while auto-draw is on,
+        // start a fresh stroke so the user can resume drawing without effort.
+        canvas.addEventListener('pointerenter', function () {
+            if (isAutoDrawOn() && !spaceDrawing
+                && (currentTool === 'brush' || currentTool === 'eraser')) {
+                startSpaceStroke();
+            }
+        });
+        canvas.addEventListener('pointerleave', function () {
+            if (isAutoDrawOn() && spaceDrawing) {
+                endSpaceStroke();
+            }
+        });
+
         function onDrawingKeyDown(e) {
             if (drawingDialog.style.display !== 'flex') return;
-            // Don't hijack typing in form fields (color picker, range etc.)
             const tag = (e.target && e.target.tagName) || '';
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
             if (e.code === 'Space') {
                 e.preventDefault();
-                if (!e.repeat) startSpaceStroke();
+                if (!e.repeat && autoDrawCheckbox) {
+                    autoDrawCheckbox.checked = !autoDrawCheckbox.checked;
+                    syncAutoDrawState();
+                }
             } else if (e.key === 'Escape') {
                 requestCloseDrawingDialog();
             }
@@ -6665,8 +6742,8 @@ document.addEventListener('DOMContentLoaded', function() {
         function onDrawingKeyUp(e) {
             if (drawingDialog.style.display !== 'flex') return;
             if (e.code === 'Space') {
+                // Space is a toggle now, not a hold — just swallow the keyup
                 e.preventDefault();
-                endSpaceStroke();
             }
         }
 
