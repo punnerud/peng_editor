@@ -6164,6 +6164,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const canvas = document.getElementById('drawing-canvas');
         const ctx = canvas.getContext('2d');
+        const canvasWrapper = document.getElementById('drawing-canvas-wrapper');
+        const brushCursor = document.getElementById('brush-cursor');
         const colorInput = document.getElementById('drawing-color');
         const sizeInput = document.getElementById('drawing-size');
         const sizeLabel = document.getElementById('drawing-size-label');
@@ -6174,8 +6176,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const toolButtons = drawingDialog.querySelectorAll('.drawing-tool');
         const titleEl = document.getElementById('drawing-dialog-title');
         const closeBtnDraw = drawingDialog.querySelector('.close-dialog');
+        const resizeHandles = drawingDialog.querySelectorAll('.canvas-resize-handle');
 
         let currentTool = 'brush';
+        let preSpaceTool = null; // remembers the tool when Space is held for temp eraser
         let currentColor = colorInput.value || '#000000';
         let currentSize = parseInt(sizeInput.value, 10) || 4;
         let isDrawing = false;
@@ -6183,12 +6187,14 @@ document.addEventListener('DOMContentLoaded', function() {
         let snapshotImage = null;
         let drawingHistory = [];
         let editingImage = null;
+        let isDirty = false; // set true when the user has drawn since open/save
         const MAX_DRAWING_HISTORY = 30;
 
         function pushHistory() {
             try {
                 drawingHistory.push(canvas.toDataURL('image/png'));
                 if (drawingHistory.length > MAX_DRAWING_HISTORY) drawingHistory.shift();
+                isDirty = true;
             } catch (err) {
                 console.warn('Drawing snapshot failed:', err);
             }
@@ -6208,6 +6214,14 @@ document.addEventListener('DOMContentLoaded', function() {
         function setActiveTool(tool) {
             currentTool = tool;
             toolButtons.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+            // Brush preview cursor only makes sense for brush/eraser
+            if (brushCursor) {
+                if (tool === 'brush' || tool === 'eraser') {
+                    updateBrushCursorSize();
+                } else {
+                    brushCursor.classList.remove('visible');
+                }
+            }
         }
 
         function pointerPos(e) {
@@ -6384,13 +6398,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
             setActiveTool('brush');
             sizeLabel.textContent = currentSize;
+            isDirty = false;
+            preSpaceTool = null;
             drawingDialog.style.display = 'flex';
+            // Sync the brush preview to the new canvas dimensions
+            updateBrushCursorSize();
         }
 
         function closeDrawingDialog() {
             drawingDialog.style.display = 'none';
             editingImage = null;
             drawingHistory = [];
+            isDirty = false;
+            preSpaceTool = null;
+            if (brushCursor) brushCursor.classList.remove('visible');
         }
 
         function saveDrawing() {
@@ -6441,9 +6462,147 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Ask before discarding unsaved work
+        function requestCloseDrawingDialog() {
+            if (isDirty) {
+                if (!confirm('Forkaste tegningen?')) return;
+            }
+            closeDrawingDialog();
+        }
+
+        // === Canvas resize via drag handles ===
+        let isResizing = false;
+        let resizeEdge = null;
+        let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
+        let resizeOffscreen = null;
+
+        function applyResize(newW, newH) {
+            newW = Math.max(80, Math.min(4000, Math.round(newW)));
+            newH = Math.max(80, Math.min(4000, Math.round(newH)));
+            if (newW === canvas.width && newH === canvas.height) return;
+            canvas.width = newW;
+            canvas.height = newH;
+            clearCanvas();
+            if (resizeOffscreen) ctx.drawImage(resizeOffscreen, 0, 0);
+        }
+
+        function onResizeMove(e) {
+            if (!isResizing) return;
+            e.preventDefault();
+            let newW = resizeStart.w;
+            let newH = resizeStart.h;
+            const dx = e.clientX - resizeStart.x;
+            const dy = e.clientY - resizeStart.y;
+            if (resizeEdge === 'right' || resizeEdge === 'corner') newW = resizeStart.w + dx;
+            if (resizeEdge === 'bottom' || resizeEdge === 'corner') newH = resizeStart.h + dy;
+            applyResize(newW, newH);
+        }
+
+        function endResize(e) {
+            if (!isResizing) return;
+            isResizing = false;
+            resizeEdge = null;
+            resizeOffscreen = null;
+            document.removeEventListener('pointermove', onResizeMove);
+            document.removeEventListener('pointerup', endResize);
+            document.removeEventListener('pointercancel', endResize);
+            isDirty = true;
+        }
+
+        resizeHandles.forEach(h => {
+            h.addEventListener('pointerdown', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                isResizing = true;
+                resizeEdge = h.dataset.edge;
+                resizeStart = { x: e.clientX, y: e.clientY, w: canvas.width, h: canvas.height };
+                // Snapshot current pixels so resize doesn't wipe the drawing
+                resizeOffscreen = document.createElement('canvas');
+                resizeOffscreen.width = canvas.width;
+                resizeOffscreen.height = canvas.height;
+                resizeOffscreen.getContext('2d').drawImage(canvas, 0, 0);
+                document.addEventListener('pointermove', onResizeMove);
+                document.addEventListener('pointerup', endResize);
+                document.addEventListener('pointercancel', endResize);
+            });
+        });
+
+        // === Brush/eraser preview cursor ===
+        function updateBrushCursorSize() {
+            const rect = canvas.getBoundingClientRect();
+            const scale = canvas.width > 0 ? (rect.width / canvas.width) : 1;
+            const displaySize = Math.max(2, currentSize * scale);
+            brushCursor.style.width = displaySize + 'px';
+            brushCursor.style.height = displaySize + 'px';
+            if (currentTool === 'eraser') {
+                brushCursor.style.borderRadius = '2px';
+                brushCursor.style.borderColor = 'rgba(204, 0, 0, 0.7)';
+                brushCursor.style.backgroundColor = 'rgba(255, 255, 255, 0.35)';
+            } else {
+                brushCursor.style.borderRadius = '50%';
+                brushCursor.style.borderColor = 'rgba(0, 0, 0, 0.7)';
+                brushCursor.style.backgroundColor = 'transparent';
+            }
+        }
+
+        function moveBrushCursor(e) {
+            if (!brushCursor) return;
+            const wrapperRect = canvasWrapper.getBoundingClientRect();
+            brushCursor.style.left = (e.clientX - wrapperRect.left + canvasWrapper.scrollLeft) + 'px';
+            brushCursor.style.top = (e.clientY - wrapperRect.top + canvasWrapper.scrollTop) + 'px';
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                updateBrushCursorSize();
+                brushCursor.classList.add('visible');
+            } else {
+                brushCursor.classList.remove('visible');
+            }
+        }
+
+        function hideBrushCursor() {
+            brushCursor.classList.remove('visible');
+        }
+
+        canvas.addEventListener('pointermove', moveBrushCursor);
+        canvas.addEventListener('pointerenter', moveBrushCursor);
+        canvas.addEventListener('pointerleave', hideBrushCursor);
+
+        // Update cursor when size or tool changes
+        sizeInput.addEventListener('input', updateBrushCursorSize);
+
+        // === Space = temporary eraser ===
+        function onDrawingKeyDown(e) {
+            if (drawingDialog.style.display !== 'flex') return;
+            // Don't hijack typing in form fields (color picker, range etc.)
+            const tag = (e.target && e.target.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            if (e.code === 'Space' && !e.repeat) {
+                e.preventDefault();
+                if (currentTool !== 'eraser') {
+                    preSpaceTool = currentTool;
+                    setActiveTool('eraser');
+                    updateBrushCursorSize();
+                }
+            } else if (e.key === 'Escape') {
+                requestCloseDrawingDialog();
+            }
+        }
+
+        function onDrawingKeyUp(e) {
+            if (drawingDialog.style.display !== 'flex') return;
+            if (e.code === 'Space' && preSpaceTool) {
+                e.preventDefault();
+                setActiveTool(preSpaceTool);
+                preSpaceTool = null;
+                updateBrushCursorSize();
+            }
+        }
+
+        document.addEventListener('keydown', onDrawingKeyDown);
+        document.addEventListener('keyup', onDrawingKeyUp);
+
         saveBtnDraw.addEventListener('click', saveDrawing);
-        cancelBtnDraw.addEventListener('click', closeDrawingDialog);
-        if (closeBtnDraw) closeBtnDraw.addEventListener('click', closeDrawingDialog);
+        cancelBtnDraw.addEventListener('click', requestCloseDrawingDialog);
+        if (closeBtnDraw) closeBtnDraw.addEventListener('click', requestCloseDrawingDialog);
 
         drawBtn.addEventListener('click', () => openDrawingDialog(null));
 

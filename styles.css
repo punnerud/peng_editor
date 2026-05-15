@@ -1616,6 +1616,7 @@ body {
 }
 
 .drawing-canvas-wrapper {
+    position: relative;
     border: 1px solid #ccc;
     background-color: #fff;
     max-width: 100%;
@@ -1636,6 +1637,73 @@ body {
     cursor: crosshair;
     touch-action: none;
     background-color: #fff;
+}
+
+/* Brush/eraser preview cursor — follows the mouse, sized like the stroke */
+.brush-cursor {
+    position: absolute;
+    pointer-events: none;
+    display: none;
+    border: 1px solid rgba(0, 0, 0, 0.65);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+    box-sizing: border-box;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    transition: border-radius 0.05s;
+}
+
+.brush-cursor.visible {
+    display: block;
+}
+
+/* Resize handles for the canvas */
+.canvas-resize-handle {
+    position: absolute;
+    background-color: #2daadb;
+    color: #fff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 6;
+    opacity: 0.85;
+    user-select: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.canvas-resize-handle:hover {
+    opacity: 1;
+}
+
+#canvas-resize-right {
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 36px;
+    cursor: ew-resize;
+}
+
+#canvas-resize-bottom {
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 22px;
+    cursor: ns-resize;
+}
+
+#canvas-resize-corner {
+    right: -10px;
+    bottom: -10px;
+    width: 24px;
+    height: 24px;
+    cursor: nwse-resize;
+}
+
+.canvas-resize-handle i {
+    font-size: 11px;
+    pointer-events: none;
 }
 
 .drawing-actions {
