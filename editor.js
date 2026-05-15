@@ -863,14 +863,22 @@ document.addEventListener('DOMContentLoaded', function() {
         // Settings button and save settings
         document.getElementById('settings-btn').addEventListener('click', showSettingsDialog);
         document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
-        
-        // Add event listener for the settings dialog close button
-        const settingsCloseBtn = document.getElementById('settings-dialog').querySelector('.close-dialog');
-        if (settingsCloseBtn) {
-            settingsCloseBtn.addEventListener('click', function() {
-                document.getElementById('settings-dialog').style.display = 'none';
-            });
-        }
+
+        // Preview every setting change live so the user sees what they're
+        // about to commit. Cancelling reverts the snapshot taken on open.
+        ['setting-auto-date', 'setting-show-words', 'setting-show-chars',
+         'setting-show-line-numbers', 'setting-page-width'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', previewSettings);
+        });
+
+        // X button and backdrop click both cancel (roll back) the changes
+        const settingsDlg = document.getElementById('settings-dialog');
+        const settingsCloseBtn = settingsDlg.querySelector('.close-dialog');
+        if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', cancelSettings);
+        settingsDlg.addEventListener('click', function (e) {
+            if (e.target === settingsDlg) cancelSettings();
+        });
         
         // Load settings from localStorage 
         loadSettings();
@@ -4684,32 +4692,56 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Save settings to localStorage
-    function saveSettings() {
-        const settings = {
+    // Settings are previewed live as the user toggles controls. Save commits
+    // them; closing without saving rolls everything back to settingsBackup.
+    let settingsBackup = null;
+
+    function readSettingsFromForm() {
+        return {
             autoDate: document.getElementById('setting-auto-date').checked,
             showWords: document.getElementById('setting-show-words').checked,
             showChars: document.getElementById('setting-show-chars').checked,
             showLineNumbers: document.getElementById('setting-show-line-numbers').checked,
             pageWidth: document.getElementById('setting-page-width').value
         };
-        
-        // Save to localStorage
+    }
+
+    function writeSettingsToForm(s) {
+        document.getElementById('setting-auto-date').checked = !!s.autoDate;
+        document.getElementById('setting-show-words').checked = !!s.showWords;
+        document.getElementById('setting-show-chars').checked = !!s.showChars;
+        document.getElementById('setting-show-line-numbers').checked = !!s.showLineNumbers;
+        document.getElementById('setting-page-width').value = s.pageWidth || 'a4';
+    }
+
+    function previewSettings() {
+        applySettings(readSettingsFromForm());
+    }
+
+    function saveSettings() {
+        const settings = readSettingsFromForm();
         safeLocalStorageSet('editorSettings', JSON.stringify(settings));
-        
-        // Apply settings
         applySettings(settings);
-        
-        // Close dialog
+        settingsBackup = null; // commit — no rollback
         document.getElementById('settings-dialog').style.display = 'none';
-        
-        // Show confirmation
         showNotification('Settings saved successfully', 'success');
     }
 
-    // Show settings dialog
+    function cancelSettings() {
+        // Roll back to the values captured when the dialog opened
+        if (settingsBackup) {
+            writeSettingsToForm(settingsBackup);
+            applySettings(settingsBackup);
+            settingsBackup = null;
+        }
+        document.getElementById('settings-dialog').style.display = 'none';
+    }
+
     function showSettingsDialog() {
-        document.getElementById('settings-dialog').style.display = 'flex';
+        // Capture the live state so we can revert on cancel
+        settingsBackup = readSettingsFromForm();
+        const dlg = document.getElementById('settings-dialog');
+        dlg.style.display = 'flex';
     }
 
     // Toggle line numbers display
