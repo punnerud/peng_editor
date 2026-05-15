@@ -598,6 +598,26 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(handleTextSelection, 10);
         });
         
+        // Tab inside an <li> → nest the item under the previous one (a/b/c…).
+        // Shift+Tab pops it back out one level. Outside a list, default Tab
+        // behaviour is left alone so the user can still leave the editor.
+        editor.addEventListener('keydown', function(e) {
+            if (e.key !== 'Tab') return;
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            if (!editor.contains(range.commonAncestorContainer)) return;
+            let node = range.startContainer;
+            if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+            const li = node && node.closest ? node.closest('li') : null;
+            if (!li) return;
+            e.preventDefault();
+            const ok = e.shiftKey ? outdentListItem(li) : indentListItem(li);
+            if (ok) {
+                try { saveHistory(); } catch (err) {}
+            }
+        });
+
         // Update toolbar when key is released (useful for keyboard selections)
         editor.addEventListener('keyup', function(e) {
             // Only update for navigation and selection keys
@@ -5879,6 +5899,58 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Function to move selected content
+    // ===== List indent / outdent =====
+    // execCommand('indent') wraps the LI in a <blockquote>, which isn't what
+    // a word-processor user expects. These move the LI inside / outside a
+    // nested <ol>/<ul> instead, so Tab/Shift+Tab give the standard
+    // 1, 2, 3 → 1.a, 1.b nesting.
+    function caretInside(li) {
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return null;
+        return sel.getRangeAt(0);
+    }
+    function placeCaretAtEnd(li) {
+        const r = document.createRange();
+        r.selectNodeContents(li);
+        r.collapse(false);
+        const s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+    }
+    function indentListItem(li) {
+        const prev = li.previousElementSibling;
+        if (!prev || prev.tagName !== 'LI') return false;
+        // Reuse a trailing nested list on the previous LI if it already has one,
+        // otherwise create a new <ol>/<ul> matching the parent type.
+        let nested = null;
+        for (let i = prev.children.length - 1; i >= 0; i--) {
+            const c = prev.children[i];
+            if (c.tagName === 'OL' || c.tagName === 'UL') { nested = c; break; }
+            if (c.nodeType === 1) break;
+        }
+        if (!nested) {
+            nested = document.createElement(li.parentNode.tagName);
+            prev.appendChild(nested);
+        }
+        nested.appendChild(li);
+        placeCaretAtEnd(li);
+        return true;
+    }
+    function outdentListItem(li) {
+        const list = li.parentNode;
+        if (!list || (list.tagName !== 'OL' && list.tagName !== 'UL')) return false;
+        const parentLi = list.parentNode;
+        if (!parentLi || parentLi.tagName !== 'LI') return false; // not nested
+        const grandList = parentLi.parentNode;
+        if (!grandList) return false;
+        // Move li to come right after parentLi at the outer level
+        grandList.insertBefore(li, parentLi.nextSibling);
+        // If the original nested list is now empty, clean it up
+        if (list.children.length === 0) list.remove();
+        placeCaretAtEnd(li);
+        return true;
+    }
+
     // Latest valid editor selection — captured by updateMovementButtonsVisibility
     // and restored before moveSelection runs, so clicking a toolbar arrow can't
     // strand us with a lost selection.
