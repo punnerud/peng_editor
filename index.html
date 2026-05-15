@@ -280,18 +280,16 @@
         <div id="colors-dialog" class="dialog">
             <div class="dialog-content colors-dialog-content">
                 <span class="close-dialog">&times;</span>
-                <h3>Farger</h3>
-                <div class="color-row">
-                    <label class="color-row-label">Tekst</label>
-                    <input type="color" id="forecolor-picker" value="#000000">
-                    <button type="button" class="color-clear" data-target="fore" title="Fjern tekstfarge">⌀</button>
-                    <div class="rainbow-palette" data-target="fore"></div>
-                </div>
-                <div class="color-row">
-                    <label class="color-row-label">Bakgrunn</label>
-                    <input type="color" id="backcolor-picker" value="#ffff00">
-                    <button type="button" class="color-clear" data-target="back" title="Fjern bakgrunnsfarge">⌀</button>
-                    <div class="rainbow-palette" data-target="back"></div>
+                <div class="color-preview" id="color-preview"><span>Aa</span></div>
+                <div class="color-pickers-row">
+                    <label class="color-picker-cell" title="Bokstavfarge">
+                        <span class="color-cell-icon" id="color-cell-fore">A</span>
+                        <input type="color" id="forecolor-picker" value="#000000">
+                    </label>
+                    <label class="color-picker-cell" title="Bakgrunnsfarge">
+                        <span class="color-cell-icon color-cell-icon-bg" id="color-cell-back"></span>
+                        <input type="color" id="backcolor-picker" value="#ffff00">
+                    </label>
                 </div>
                 <button type="button" id="colors-save-btn">Lagre</button>
             </div>

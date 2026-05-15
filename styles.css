@@ -1449,78 +1449,83 @@ body {
 
 /* ===== Combined color dialog ===== */
 .colors-dialog-content {
-    min-width: 360px;
-    max-width: 540px;
+    min-width: 340px;
+    max-width: 95vw;
+    /* Draggable lower-right corner */
+    resize: both;
+    overflow: auto;
+    min-height: 280px;
+    max-height: 90vh;
 }
 
-.color-row {
-    display: grid;
-    grid-template-columns: 80px 44px 36px 1fr;
+/* Large visual preview: text-color shown on background-color, no labels so
+   kids can recognise the effect without reading. */
+.color-preview {
+    width: 100%;
+    height: 120px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 12px 0;
-}
-
-.color-row-label {
+    justify-content: center;
+    margin: 12px 0 18px;
     font-weight: bold;
-    color: #333;
+    font-size: 72px;
+    line-height: 1;
+    user-select: none;
+    background-color: #ffff00;
+    color: #000000;
+    transition: background-color 0.08s linear, color 0.08s linear;
 }
 
-.color-row input[type="color"] {
-    width: 44px;
+.color-pickers-row {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin: 0 0 10px;
+}
+
+.color-picker-cell {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.color-cell-icon {
+    width: 52px;
+    height: 52px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: bold;
+    color: #000;
+    background-color: #fff;
+    transition: color 0.08s linear, background-color 0.08s linear;
+}
+
+.color-cell-icon-bg {
+    background-color: #ffff00;
+    color: transparent;
+}
+
+.color-picker-cell input[type="color"] {
+    width: 64px;
     height: 36px;
     padding: 2px;
     border: 1px solid #ccc;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
     background-color: #fff;
 }
 
-.color-clear {
-    width: 36px;
-    height: 36px;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    background: linear-gradient(135deg, #fff 0%, #fff 47%, #d33 48%, #d33 52%, #fff 53%, #fff 100%) !important;
-    color: #333 !important;
-    cursor: pointer;
-    font-size: 16px;
-    line-height: 1;
-    padding: 0 !important;
-    margin: 0 !important;
-}
-
-.color-clear:hover {
-    border-color: #888;
-}
-
-.rainbow-palette {
-    display: grid;
-    grid-template-columns: repeat(16, 1fr);
-    gap: 2px;
-}
-
-.rainbow-swatch {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    min-height: 18px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
-    border-radius: 2px;
-    cursor: pointer;
-    padding: 0;
-    transition: transform 0.08s ease, box-shadow 0.08s ease;
-}
-
-.rainbow-swatch:hover {
-    transform: scale(1.18);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-    z-index: 1;
-    position: relative;
-}
-
 #colors-save-btn {
     width: 100%;
-    margin-top: 16px;
+    margin-top: 14px;
 }
 
 @media (max-width: 500px) {
@@ -1528,21 +1533,26 @@ body {
         min-width: 0;
         width: 92vw;
     }
-    .color-row {
-        grid-template-columns: 60px 40px 32px 1fr;
-        gap: 6px;
+    .color-preview {
+        height: 100px;
+        font-size: 56px;
     }
-    .rainbow-palette {
-        grid-template-columns: repeat(12, 1fr);
+    .color-pickers-row {
+        gap: 16px;
     }
 }
 
 /* ===== Drawing dialog (mspaint-style) ===== */
 .drawing-dialog-content {
-    min-width: 0;
-    max-width: 95vw;
+    min-width: 380px;
+    max-width: 98vw;
     width: auto;
     padding: 16px 18px;
+    /* User can drag the lower-right outer corner to resize the dialog */
+    resize: both;
+    overflow: auto;
+    min-height: 360px;
+    max-height: 95vh;
 }
 
 .drawing-toolbar {

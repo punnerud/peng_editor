@@ -507,6 +507,12 @@ document.addEventListener('DOMContentLoaded', function() {
         pipetteBtn.addEventListener('click', togglePipette);
         
         // Add movement button event listeners
+        ['move-left-btn', 'move-up-btn', 'move-down-btn', 'move-right-btn'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            // Don't let the button steal the editor's selection on mousedown.
+            btn.addEventListener('mousedown', e => e.preventDefault());
+        });
         document.getElementById('move-left-btn').addEventListener('click', () => moveSelection('left'));
         document.getElementById('move-up-btn').addEventListener('click', () => moveSelection('up'));
         document.getElementById('move-down-btn').addEventListener('click', () => moveSelection('down'));
@@ -5835,43 +5841,51 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Function to move selected content
+    // Latest valid editor selection — captured by updateMovementButtonsVisibility
+    // and restored before moveSelection runs, so clicking a toolbar arrow can't
+    // strand us with a lost selection.
+    let savedMoveRange = null;
+
     // Move the selected block(s) up/down by swapping with the adjacent
-    // sibling block, or indent/outdent for left/right.
-    //
-    // The previous version did extractContents() + insertNode(<div>), which:
-    //   - wrapped the selection in a stray <div> (breaking HTML structure)
-    //   - failed when elementFromPoint returned a node outside the editor,
-    //     leaving the content "lost" visually
-    // Hence the user's report: the marked text disappeared when arrows were
-    // pressed. Block-level swap is both safer and matches user expectations.
+    // sibling block at the same nesting level, or indent/outdent for left/right.
     function moveSelection(direction) {
         const selection = window.getSelection();
-        if (!selection || !selection.rangeCount) return;
+
+        // If the selection drifted out of the editor (e.g. button took focus),
+        // restore the last good one we captured.
+        const haveValid = selection.rangeCount
+            && editor.contains(selection.getRangeAt(0).commonAncestorContainer);
+        if (!haveValid && savedMoveRange) {
+            try {
+                selection.removeAllRanges();
+                selection.addRange(savedMoveRange);
+            } catch (err) {}
+        }
+        if (!selection.rangeCount) return;
 
         const range = selection.getRangeAt(0);
         if (!editor.contains(range.commonAncestorContainer)) return;
 
-        // Left/right → existing indent/outdent semantics
-        if (direction === 'left') {
-            document.execCommand('outdent');
-            return;
-        }
-        if (direction === 'right') {
-            document.execCommand('indent');
-            return;
-        }
+        if (direction === 'left') { document.execCommand('outdent'); return; }
+        if (direction === 'right') { document.execCommand('indent'); return; }
 
-        // Up/down → swap the containing top-level block with its sibling.
-        function topBlockOf(node) {
+        // Find the nearest ancestor block element. Going to nearest (rather than
+        // strictly direct child of editor) lets us move list items inside their
+        // list, paragraphs inside a wrapping div, etc. — which is what the user
+        // expects when arrowing through line breaks across structures.
+        const BLOCK_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+            'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'SECTION', 'ARTICLE']);
+        function nearestBlock(node) {
             let n = (node && node.nodeType === Node.TEXT_NODE) ? node.parentNode : node;
-            while (n && n.parentNode && n.parentNode !== editor) {
+            while (n && n !== editor) {
+                if (BLOCK_TAGS.has(n.tagName)) return n;
                 n = n.parentNode;
             }
-            return (n && n.parentNode === editor) ? n : null;
+            return null;
         }
 
-        let firstBlock = topBlockOf(range.startContainer);
-        let lastBlock = topBlockOf(range.endContainer);
+        let firstBlock = nearestBlock(range.startContainer);
+        let lastBlock = nearestBlock(range.endContainer);
         if (!firstBlock) return;
         if (!lastBlock) lastBlock = firstBlock;
 
@@ -5885,24 +5899,44 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Walk both blocks up until they share a parent — required to swap with
+        // a sibling. This handles selections that span structurally different
+        // nesting (e.g. one paragraph in a div, one outside).
+        while (firstBlock.parentNode !== lastBlock.parentNode) {
+            if (firstBlock.parentNode === editor) {
+                lastBlock = lastBlock.parentNode;
+            } else if (lastBlock.parentNode === editor) {
+                firstBlock = firstBlock.parentNode;
+            } else {
+                // Step both up
+                firstBlock = firstBlock.parentNode;
+                lastBlock = lastBlock.parentNode;
+            }
+            if (!firstBlock || !lastBlock) return;
+        }
+
+        const parent = firstBlock.parentNode;
+        if (!parent) return;
+
         if (direction === 'up') {
             const prev = firstBlock.previousElementSibling;
             if (!prev) return; // already at the top
-            editor.insertBefore(prev, lastBlock.nextSibling);
+            parent.insertBefore(prev, lastBlock.nextSibling);
         } else if (direction === 'down') {
             const next = lastBlock.nextElementSibling;
             if (!next) return; // already at the bottom
-            editor.insertBefore(next, firstBlock);
+            parent.insertBefore(next, firstBlock);
         } else {
             return;
         }
 
-        // Re-select the moved blocks so the user can keep moving them
+        // Re-select the moved blocks so the user can chain another move.
         const newRange = document.createRange();
         newRange.setStartBefore(firstBlock);
         newRange.setEndAfter(lastBlock);
         selection.removeAllRanges();
         selection.addRange(newRange);
+        savedMoveRange = newRange.cloneRange();
 
         try { saveHistory(); } catch (err) {}
     }
@@ -5911,15 +5945,18 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateMovementButtonsVisibility() {
         const selection = window.getSelection();
         const selectionControls = document.querySelector('.selection-controls');
-        
+
         if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             if (editor.contains(range.commonAncestorContainer)) {
                 selectionControls.style.display = 'flex';
+                // Cache the current range so moveSelection can fall back to it
+                // if a button click steals focus before the handler reads it.
+                savedMoveRange = range.cloneRange();
                 return;
             }
         }
-        
+
         selectionControls.style.display = 'none';
     }
 
@@ -5974,51 +6011,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const saveBtnC = document.getElementById('colors-save-btn');
         const closeBtnC = colorsDialog.querySelector('.close-dialog');
-        const forePalette = colorsDialog.querySelector('.rainbow-palette[data-target="fore"]');
-        const backPalette = colorsDialog.querySelector('.rainbow-palette[data-target="back"]');
-        const clearButtons = colorsDialog.querySelectorAll('.color-clear');
+        const preview = document.getElementById('color-preview');
+        const cellFore = document.getElementById('color-cell-fore');
+        const cellBack = document.getElementById('color-cell-back');
 
-        // Rainbow palette swatches — covers a full rainbow plus grayscale row.
-        const palette = [
-            '#000000', '#444444', '#888888', '#bbbbbb', '#dddddd', '#ffffff',
-            '#ff0000', '#ff5500', '#ff8800', '#ffaa00', '#ffdd00', '#ffff00',
-            '#bbff00', '#66cc00', '#00aa00', '#00cc88', '#00bbbb', '#0088ff',
-            '#0044cc', '#5500cc', '#8800cc', '#cc00cc', '#ff66cc', '#aa3300',
-        ];
-
-        function buildPalette(container, onPick) {
-            palette.forEach(hex => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'rainbow-swatch';
-                btn.style.backgroundColor = hex;
-                btn.title = hex;
-                btn.addEventListener('click', () => onPick(hex));
-                container.appendChild(btn);
-            });
+        // Sync the preview block and the small indicator cells to the chosen
+        // colours. The cells are visual hints (a letter for text colour, a
+        // coloured square for background) so the dialog stays readable for
+        // kids who can't quickly parse Norwegian labels.
+        function syncColorPreview() {
+            const fg = forecolorPicker.value || '#000000';
+            const bg = backcolorPicker.value || '#ffffff';
+            if (preview) {
+                preview.style.color = fg;
+                preview.style.backgroundColor = bg;
+            }
+            if (cellFore) cellFore.style.color = fg;
+            if (cellBack) cellBack.style.backgroundColor = bg;
         }
 
-        if (forePalette) buildPalette(forePalette, (hex) => {
-            forecolorPicker.value = hex;
-            restoreColorSelection();
-            execCommand('foreColor', false, hex);
-        });
-        if (backPalette) buildPalette(backPalette, (hex) => {
-            backcolorPicker.value = hex;
-            restoreColorSelection();
-            execCommand('hiliteColor', false, hex);
-        });
-
-        clearButtons.forEach(b => b.addEventListener('click', function () {
-            restoreColorSelection();
-            if (b.dataset.target === 'fore') {
-                execCommand('foreColor', false, '#000000');
-                forecolorPicker.value = '#000000';
-            } else {
-                execCommand('hiliteColor', false, 'transparent');
-                backcolorPicker.value = '#ffffff';
-            }
-        }));
+        forecolorPicker.addEventListener('input', syncColorPreview);
+        backcolorPicker.addEventListener('input', syncColorPreview);
 
         function openColorsDialog() {
             const sel = window.getSelection();
@@ -6029,6 +6042,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 savedColorRange = null;
             }
             try { updateColorPickerState(); } catch (err) {}
+            syncColorPreview();
             colorsDialog.style.display = 'flex';
         }
 
@@ -6179,7 +6193,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const resizeHandles = drawingDialog.querySelectorAll('.canvas-resize-handle');
 
         let currentTool = 'brush';
-        let preSpaceTool = null; // remembers the tool when Space is held for temp eraser
+        let spaceDrawing = false; // true while Space is held: stroke follows the cursor
         let currentColor = colorInput.value || '#000000';
         let currentSize = parseInt(sizeInput.value, 10) || 4;
         let isDrawing = false;
@@ -6399,7 +6413,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setActiveTool('brush');
             sizeLabel.textContent = currentSize;
             isDirty = false;
-            preSpaceTool = null;
+            spaceDrawing = false;
             drawingDialog.style.display = 'flex';
             // Sync the brush preview to the new canvas dimensions
             updateBrushCursorSize();
@@ -6410,7 +6424,7 @@ document.addEventListener('DOMContentLoaded', function() {
             editingImage = null;
             drawingHistory = [];
             isDirty = false;
-            preSpaceTool = null;
+            spaceDrawing = false;
             if (brushCursor) brushCursor.classList.remove('visible');
         }
 
@@ -6471,10 +6485,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // === Canvas resize via drag handles ===
+        // Bug fix: previously this listened on document and let pointerup
+        // bubble freely. When the user released the mouse outside the canvas
+        // wrapper, the up-event could land on the dialog backdrop and a
+        // synthesized click would close the dialog. We now use
+        // setPointerCapture on the handle itself so every move/up goes to the
+        // handle and stops propagating.
         let isResizing = false;
         let resizeEdge = null;
         let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
         let resizeOffscreen = null;
+        let resizeActiveHandle = null;
 
         function applyResize(newW, newH) {
             newW = Math.max(80, Math.min(4000, Math.round(newW)));
@@ -6489,6 +6510,7 @@ document.addEventListener('DOMContentLoaded', function() {
         function onResizeMove(e) {
             if (!isResizing) return;
             e.preventDefault();
+            e.stopPropagation();
             let newW = resizeStart.w;
             let newH = resizeStart.h;
             const dx = e.clientX - resizeStart.x;
@@ -6500,13 +6522,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function endResize(e) {
             if (!isResizing) return;
+            e.preventDefault();
+            e.stopPropagation();
             isResizing = false;
             resizeEdge = null;
             resizeOffscreen = null;
-            document.removeEventListener('pointermove', onResizeMove);
-            document.removeEventListener('pointerup', endResize);
-            document.removeEventListener('pointercancel', endResize);
             isDirty = true;
+            // Swallow the immediately-following click so it can't trigger any
+            // outside-of-dialog handler (e.g. accidentally closing the dialog).
+            const swallowClick = (ev) => {
+                ev.stopPropagation();
+                ev.preventDefault();
+                document.removeEventListener('click', swallowClick, true);
+            };
+            document.addEventListener('click', swallowClick, true);
+            setTimeout(() => document.removeEventListener('click', swallowClick, true), 50);
+            if (resizeActiveHandle && e.pointerId !== undefined) {
+                try { resizeActiveHandle.releasePointerCapture(e.pointerId); } catch (err) {}
+            }
+            resizeActiveHandle = null;
         }
 
         resizeHandles.forEach(h => {
@@ -6521,10 +6555,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 resizeOffscreen.width = canvas.width;
                 resizeOffscreen.height = canvas.height;
                 resizeOffscreen.getContext('2d').drawImage(canvas, 0, 0);
-                document.addEventListener('pointermove', onResizeMove);
-                document.addEventListener('pointerup', endResize);
-                document.addEventListener('pointercancel', endResize);
+                resizeActiveHandle = h;
+                try { h.setPointerCapture(e.pointerId); } catch (err) {}
             });
+            h.addEventListener('pointermove', onResizeMove);
+            h.addEventListener('pointerup', endResize);
+            h.addEventListener('pointercancel', endResize);
+            // Also block click events from bubbling
+            h.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); });
         });
 
         // === Brush/eraser preview cursor ===
@@ -6545,6 +6583,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Last pointer position over the canvas — needed so the Space-key
+        // "auto-draw" can pick up where the mouse already is.
+        let lastCanvasPointer = null;
+
         function moveBrushCursor(e) {
             if (!brushCursor) return;
             const wrapperRect = canvasWrapper.getBoundingClientRect();
@@ -6555,6 +6597,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 brushCursor.classList.add('visible');
             } else {
                 brushCursor.classList.remove('visible');
+            }
+            lastCanvasPointer = pointerPos(e);
+
+            // If Space is held, draw a continuous stroke as the mouse moves —
+            // the user doesn't have to press the mouse button at all.
+            if (spaceDrawing && (currentTool === 'brush' || currentTool === 'eraser')) {
+                ctx.lineTo(lastCanvasPointer.x, lastCanvasPointer.y);
+                ctx.stroke();
             }
         }
 
@@ -6569,19 +6619,44 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update cursor when size or tool changes
         sizeInput.addEventListener('input', updateBrushCursorSize);
 
-        // === Space = temporary eraser ===
+        // === Space = "hold to draw" with the active tool ===
+        // While Space is held, the canvas draws/erases continuously at the
+        // current mouse position with the active tool. Releasing Space ends
+        // the stroke. Saves the user from holding the mouse button down on a
+        // touchpad.
+        function startSpaceStroke() {
+            if (!lastCanvasPointer) return;
+            if (isDrawing || spaceDrawing) return;
+            if (currentTool !== 'brush' && currentTool !== 'eraser') return;
+            spaceDrawing = true;
+            isDrawing = true;
+            pushHistory();
+            startX = lastCanvasPointer.x;
+            startY = lastCanvasPointer.y;
+            ctx.beginPath();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = currentSize;
+            ctx.strokeStyle = (currentTool === 'eraser') ? '#ffffff' : currentColor;
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(startX + 0.01, startY + 0.01); // ensure a single-tap dot
+            ctx.stroke();
+        }
+
+        function endSpaceStroke() {
+            if (!spaceDrawing) return;
+            spaceDrawing = false;
+            isDrawing = false;
+        }
+
         function onDrawingKeyDown(e) {
             if (drawingDialog.style.display !== 'flex') return;
             // Don't hijack typing in form fields (color picker, range etc.)
             const tag = (e.target && e.target.tagName) || '';
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-            if (e.code === 'Space' && !e.repeat) {
+            if (e.code === 'Space') {
                 e.preventDefault();
-                if (currentTool !== 'eraser') {
-                    preSpaceTool = currentTool;
-                    setActiveTool('eraser');
-                    updateBrushCursorSize();
-                }
+                if (!e.repeat) startSpaceStroke();
             } else if (e.key === 'Escape') {
                 requestCloseDrawingDialog();
             }
@@ -6589,11 +6664,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function onDrawingKeyUp(e) {
             if (drawingDialog.style.display !== 'flex') return;
-            if (e.code === 'Space' && preSpaceTool) {
+            if (e.code === 'Space') {
                 e.preventDefault();
-                setActiveTool(preSpaceTool);
-                preSpaceTool = null;
-                updateBrushCursorSize();
+                endSpaceStroke();
             }
         }
 
