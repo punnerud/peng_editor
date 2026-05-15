@@ -282,14 +282,16 @@
                 <span class="close-dialog">&times;</span>
                 <div class="color-preview" id="color-preview"><span>Aa</span></div>
                 <div class="color-pickers-row">
-                    <label class="color-picker-cell" title="Bokstavfarge">
+                    <div class="color-picker-cell" title="Bokstavfarge">
                         <span class="color-cell-icon" id="color-cell-fore">A</span>
                         <input type="color" id="forecolor-picker" value="#000000">
-                    </label>
-                    <label class="color-picker-cell" title="Bakgrunnsfarge">
+                        <div class="recent-colors" id="recent-fore"></div>
+                    </div>
+                    <div class="color-picker-cell" title="Bakgrunnsfarge">
                         <span class="color-cell-icon color-cell-icon-bg" id="color-cell-back"></span>
                         <input type="color" id="backcolor-picker" value="#ffff00">
-                    </label>
+                        <div class="recent-colors" id="recent-back"></div>
+                    </div>
                 </div>
                 <button type="button" id="colors-save-btn">Lagre</button>
                 <div class="dialog-resize-edge dialog-resize-right" data-edge="right" title="Dra for å gjøre bredere"></div>
@@ -323,7 +325,8 @@
                             <input type="checkbox" id="drawing-autodraw-toggle">
                             <i class="fas fa-thumbtack"></i>
                         </label>
-                        <button type="button" id="drawing-undo-btn" title="Angre"><i class="fas fa-undo"></i></button>
+                        <button type="button" id="drawing-undo-btn" title="Angre (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+                        <button type="button" id="drawing-redo-btn" title="Gjør om (Ctrl+Shift+Z)"><i class="fas fa-redo"></i></button>
                         <button type="button" id="drawing-clear-btn" title="Tøm"><i class="fas fa-trash"></i></button>
                     </div>
                 </div>

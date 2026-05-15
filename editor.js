@@ -916,15 +916,22 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Special handling for background color
             if (command === 'hiliteColor') {
-                // Some browsers have issues with hiliteColor, so use backColor as a fallback
+                // hiliteColor only works reliably when styleWithCSS is true —
+                // otherwise some browsers apply backColor to the whole body
+                // instead of the selection, which is why background "wouldn't
+                // work" in the colors dialog.
+                try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+                let ok = false;
                 try {
-                    document.execCommand(command, showUI, value);
-                    console.log(`Executed command: ${command}`, value ? `Value: ${value}` : '');
+                    ok = document.execCommand(command, showUI, value);
+                    console.log(`Executed command: ${command}`, value ? `Value: ${value}` : '', 'ok=' + ok);
                 } catch (e) {
-                    console.log('hiliteColor failed, trying backColor instead');
-                    document.execCommand('backColor', showUI, value);
-                    console.log(`Executed fallback command: backColor`, value ? `Value: ${value}` : '');
+                    console.log('hiliteColor threw, trying backColor instead');
                 }
+                if (!ok) {
+                    try { document.execCommand('backColor', showUI, value); } catch (e) {}
+                }
+                try { document.execCommand('styleWithCSS', false, false); } catch (e) {}
                 
                 // Additionally, apply CSS to ensure the background color is visible
                 try {
@@ -6038,6 +6045,66 @@ document.addEventListener('DOMContentLoaded', function() {
         const preview = document.getElementById('color-preview');
         const cellFore = document.getElementById('color-cell-fore');
         const cellBack = document.getElementById('color-cell-back');
+        const recentForeEl = document.getElementById('recent-fore');
+        const recentBackEl = document.getElementById('recent-back');
+
+        // Last 5 colors picked, shared between text and background. Stored in
+        // sessionStorage so they persist across dialog opens within a tab.
+        const RECENT_KEY = 'pengEditorRecentColors';
+        const RECENT_MAX = 5;
+        let recentColors = (function () {
+            try {
+                const raw = sessionStorage.getItem(RECENT_KEY);
+                const arr = raw ? JSON.parse(raw) : null;
+                return Array.isArray(arr) ? arr.slice(0, RECENT_MAX) : [];
+            } catch (e) { return []; }
+        })();
+
+        function persistRecent() {
+            try {
+                sessionStorage.setItem(RECENT_KEY, JSON.stringify(recentColors));
+            } catch (e) {}
+        }
+
+        function rememberRecent(hex) {
+            if (!hex || !/^#[0-9a-f]{3,8}$/i.test(hex)) return;
+            const norm = hex.toLowerCase();
+            const idx = recentColors.indexOf(norm);
+            if (idx >= 0) recentColors.splice(idx, 1);
+            recentColors.unshift(norm);
+            if (recentColors.length > RECENT_MAX) recentColors.length = RECENT_MAX;
+            persistRecent();
+            renderRecent();
+        }
+
+        function renderRecent() {
+            [
+                { el: recentForeEl, apply: (hex) => {
+                    forecolorPicker.value = hex;
+                    restoreColorSelection();
+                    execCommand('foreColor', false, hex);
+                    syncColorPreview();
+                }},
+                { el: recentBackEl, apply: (hex) => {
+                    backcolorPicker.value = hex;
+                    restoreColorSelection();
+                    execCommand('hiliteColor', false, hex);
+                    syncColorPreview();
+                }}
+            ].forEach(({ el, apply }) => {
+                if (!el) return;
+                el.innerHTML = '';
+                recentColors.forEach(hex => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'recent-color';
+                    btn.style.backgroundColor = hex;
+                    btn.title = hex;
+                    btn.addEventListener('click', () => apply(hex));
+                    el.appendChild(btn);
+                });
+            });
+        }
 
         // Sync the preview block and the small indicator cells to the chosen
         // colours. The cells are visual hints (a letter for text colour, a
@@ -6057,6 +6124,11 @@ document.addEventListener('DOMContentLoaded', function() {
         forecolorPicker.addEventListener('input', syncColorPreview);
         backcolorPicker.addEventListener('input', syncColorPreview);
 
+        // Remember the colour the user committed to (on change, not every
+        // pixel of drag) — that's the value that ends up applied to text.
+        forecolorPicker.addEventListener('change', () => rememberRecent(forecolorPicker.value));
+        backcolorPicker.addEventListener('change', () => rememberRecent(backcolorPicker.value));
+
         function openColorsDialog() {
             const sel = window.getSelection();
             if (sel && sel.rangeCount > 0
@@ -6067,6 +6139,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             try { updateColorPickerState(); } catch (err) {}
             syncColorPreview();
+            renderRecent();
             colorsDialog.style.display = 'flex';
         }
 
@@ -6138,19 +6211,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 content.style.maxHeight = 'none';
 
                 if (innerCanvas && canvasStart) {
-                    const newCW = (edge === 'bottom')
-                        ? innerCanvas.width
-                        : Math.max(80, Math.min(4000, canvasStart.w + dx));
-                    const newCH = (edge === 'right')
-                        ? innerCanvas.height
-                        : Math.max(80, Math.min(4000, canvasStart.h + dy));
-                    if (newCW !== innerCanvas.width || newCH !== innerCanvas.height) {
-                        innerCanvas.width = newCW;
-                        innerCanvas.height = newCH;
-                        const cctx = innerCanvas.getContext('2d');
-                        cctx.fillStyle = '#ffffff';
-                        cctx.fillRect(0, 0, newCW, newCH);
-                        if (canvasSnapshot) cctx.drawImage(canvasSnapshot, 0, 0);
+                    // Bind canvas pixel size directly to the wrapper after the
+                    // dialog has been resized. This way the canvas never grows
+                    // larger than what fits in the dialog (no leftover checker
+                    // pattern from a too-big canvas being scaled down to fit).
+                    const wrapper = content.querySelector('.drawing-canvas-wrapper');
+                    if (wrapper) {
+                        const wrapW = Math.max(80, Math.min(4000, wrapper.clientWidth));
+                        const wrapH = Math.max(80, Math.min(4000, wrapper.clientHeight));
+                        if (wrapW !== innerCanvas.width || wrapH !== innerCanvas.height) {
+                            innerCanvas.width = wrapW;
+                            innerCanvas.height = wrapH;
+                            const cctx = innerCanvas.getContext('2d');
+                            cctx.fillStyle = '#ffffff';
+                            cctx.fillRect(0, 0, wrapW, wrapH);
+                            if (canvasSnapshot) cctx.drawImage(canvasSnapshot, 0, 0);
+                        }
                     }
                 }
             });
@@ -6309,6 +6385,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const sizeInput = document.getElementById('drawing-size');
         const sizeLabel = document.getElementById('drawing-size-label');
         const undoBtnDraw = document.getElementById('drawing-undo-btn');
+        const redoBtnDraw = document.getElementById('drawing-redo-btn');
         const clearBtnDraw = document.getElementById('drawing-clear-btn');
         const saveBtnDraw = document.getElementById('drawing-save-btn');
         const cancelBtnDraw = document.getElementById('drawing-cancel-btn');
@@ -6326,15 +6403,25 @@ document.addEventListener('DOMContentLoaded', function() {
         let startX = 0, startY = 0;
         let snapshotImage = null;
         let drawingHistory = [];
+        let redoStack = [];
         let editingImage = null;
         let isDirty = false; // set true when the user has drawn since open/save
         const MAX_DRAWING_HISTORY = 30;
+
+        function updateUndoRedoButtons() {
+            if (undoBtnDraw) undoBtnDraw.disabled = drawingHistory.length === 0;
+            if (redoBtnDraw) redoBtnDraw.disabled = redoStack.length === 0;
+        }
 
         function pushHistory() {
             try {
                 drawingHistory.push(canvas.toDataURL('image/png'));
                 if (drawingHistory.length > MAX_DRAWING_HISTORY) drawingHistory.shift();
+                // Any new action invalidates the redo stack — you can only
+                // redo as long as you haven't done anything else in between.
+                redoStack = [];
                 isDirty = true;
+                updateUndoRedoButtons();
             } catch (err) {
                 console.warn('Drawing snapshot failed:', err);
             }
@@ -6343,12 +6430,33 @@ document.addEventListener('DOMContentLoaded', function() {
         function popHistory() {
             const data = drawingHistory.pop();
             if (!data) return;
+            // Snapshot current state into redo before reverting
+            try {
+                redoStack.push(canvas.toDataURL('image/png'));
+            } catch (err) {}
             const img = new Image();
             img.onload = function () {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(img, 0, 0);
             };
             img.src = data;
+            updateUndoRedoButtons();
+        }
+
+        function redoFromStack() {
+            const data = redoStack.pop();
+            if (!data) return;
+            try {
+                drawingHistory.push(canvas.toDataURL('image/png'));
+            } catch (err) {}
+            const img = new Image();
+            img.onload = function () {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = data;
+            isDirty = true;
+            updateUndoRedoButtons();
         }
 
         function setActiveTool(tool) {
@@ -6362,10 +6470,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     brushCursor.classList.remove('visible');
                 }
             }
-            // Auto-draw only applies to brush/eraser — silently disable it
-            // when the user picks line/rect/circle/fill so it doesn't appear
-            // stuck on after a tool switch.
-            if (tool !== 'brush' && tool !== 'eraser' && autoDrawCheckbox && autoDrawCheckbox.checked) {
+            // Default Space-auto-draw OFF whenever a new tool is picked, even
+            // if the new tool also supports it. Forces an explicit opt-in.
+            if (autoDrawCheckbox && autoDrawCheckbox.checked) {
                 autoDrawCheckbox.checked = false;
                 if (autoDrawLabel) autoDrawLabel.classList.remove('active');
                 endSpaceStroke();
@@ -6499,22 +6606,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        function onPointerMove(e) {
-            if (!isDrawing) return;
-            const p = pointerPos(e);
-            const shift = !!e.shiftKey;
-            if (currentTool === 'brush' || currentTool === 'eraser') {
-                ctx.lineTo(p.x, p.y);
-                ctx.stroke();
-            } else if (currentTool === 'line') {
+        // Shared shape-preview routine used by both pointer-drag (onPointerMove)
+        // and space-key auto-draw (moveBrushCursor). startX/startY are set
+        // when the stroke begins.
+        function drawShapeAt(p, shift) {
+            if (currentTool === 'line') {
                 restoreShapeSnapshot();
-                // Shift snaps the line to the nearest 45° angle from the
-                // starting point — useful for clean diagonals/horizontals.
                 let endX = p.x, endY = p.y;
                 if (shift) {
                     const dx = p.x - startX, dy = p.y - startY;
                     const dist = Math.hypot(dx, dy);
-                    const step = Math.PI / 4; // 45°
+                    const step = Math.PI / 4; // snap to 45°
                     const snapped = Math.round(Math.atan2(dy, dx) / step) * step;
                     endX = startX + Math.cos(snapped) * dist;
                     endY = startY + Math.sin(snapped) * dist;
@@ -6530,7 +6632,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 restoreShapeSnapshot();
                 let w = p.x - startX, h = p.y - startY;
                 if (shift) {
-                    // Constrain to a square
                     const s = Math.min(Math.abs(w), Math.abs(h));
                     w = (w < 0 ? -1 : 1) * s;
                     h = (h < 0 ? -1 : 1) * s;
@@ -6543,7 +6644,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 let rx = (p.x - startX) / 2;
                 let ry = (p.y - startY) / 2;
                 if (shift) {
-                    // Constrain to a perfect circle
                     const r = Math.min(Math.abs(rx), Math.abs(ry));
                     rx = (rx < 0 ? -1 : 1) * r;
                     ry = (ry < 0 ? -1 : 1) * r;
@@ -6553,6 +6653,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 ctx.strokeStyle = currentColor;
                 ctx.ellipse(startX + rx, startY + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
                 ctx.stroke();
+            }
+        }
+
+        function onPointerMove(e) {
+            if (!isDrawing) return;
+            const p = pointerPos(e);
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+            } else {
+                drawShapeAt(p, !!e.shiftKey);
             }
         }
 
@@ -6578,6 +6689,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         undoBtnDraw.addEventListener('click', popHistory);
+        if (redoBtnDraw) redoBtnDraw.addEventListener('click', redoFromStack);
         clearBtnDraw.addEventListener('click', () => {
             pushHistory();
             clearCanvas();
@@ -6587,22 +6699,14 @@ document.addEventListener('DOMContentLoaded', function() {
             editingImage = existingImg || null;
             titleEl.textContent = existingImg ? 'Rediger tegning' : 'Tegne';
             drawingHistory = [];
+            redoStack = [];
+            updateUndoRedoButtons();
 
-            if (existingImg) {
-                const w = existingImg.naturalWidth || existingImg.width || 640;
-                const h = existingImg.naturalHeight || existingImg.height || 420;
-                canvas.width = Math.min(w, 2000);
-                canvas.height = Math.min(h, 2000);
-                clearCanvas();
-                const tmp = new Image();
-                tmp.onload = () => ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
-                tmp.onerror = () => clearCanvas();
-                tmp.src = existingImg.src;
-            } else {
-                canvas.width = 640;
-                canvas.height = 420;
-                clearCanvas();
-            }
+            // Tentative starting size — gets overwritten once we can measure
+            // the wrapper after the dialog has been laid out.
+            canvas.width = 640;
+            canvas.height = 420;
+            clearCanvas();
 
             setActiveTool('brush');
             sizeLabel.textContent = currentSize;
@@ -6611,16 +6715,32 @@ document.addEventListener('DOMContentLoaded', function() {
             if (autoDrawCheckbox) autoDrawCheckbox.checked = false;
             if (autoDrawLabel) autoDrawLabel.classList.remove('active');
             drawingDialog.style.display = 'flex';
-            // Sync the brush preview and canvas display now that the wrapper
-            // has a real size (display:flex was just applied).
-            updateBrushCursorSize();
-            requestAnimationFrame(fitCanvasDisplay);
+
+            // After the layout pass, bind canvas pixel size to the wrapper —
+            // that way there's never a mismatched aspect ratio leaving a
+            // checkered margin on the sides.
+            requestAnimationFrame(() => {
+                const wrapW = Math.max(80, canvasWrapper.clientWidth);
+                const wrapH = Math.max(80, canvasWrapper.clientHeight);
+                canvas.width = wrapW;
+                canvas.height = wrapH;
+                clearCanvas();
+                if (existingImg) {
+                    const tmp = new Image();
+                    tmp.onload = () => ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+                    tmp.onerror = () => clearCanvas();
+                    tmp.src = existingImg.src;
+                }
+                updateBrushCursorSize();
+                fitCanvasDisplay();
+            });
         }
 
         function closeDrawingDialog() {
             drawingDialog.style.display = 'none';
             editingImage = null;
             drawingHistory = [];
+            redoStack = [];
             isDirty = false;
             spaceDrawing = false;
             if (autoDrawCheckbox) autoDrawCheckbox.checked = false;
@@ -6722,18 +6842,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             lastCanvasPointer = pointerPos(e);
 
-            // Auto-draw mode: if the pin is on but no stroke is active yet
-            // (e.g. user just toggled on while mouse was elsewhere), kick one
-            // off here so dragging the mouse starts painting right away.
-            if (isAutoDrawOn() && !spaceDrawing && !isDrawing
-                && (currentTool === 'brush' || currentTool === 'eraser')) {
+            // Auto-draw: kick off a stroke (or shape preview) if the pin is
+            // on but nothing is active yet. Works for brush/eraser as well as
+            // line/rect/circle. Fill is excluded.
+            if (isAutoDrawOn() && !spaceDrawing && !isDrawing && currentTool !== 'fill') {
                 startSpaceStroke();
             }
 
-            // Continuous stroke while auto-draw / Space is active.
-            if (spaceDrawing && (currentTool === 'brush' || currentTool === 'eraser')) {
-                ctx.lineTo(lastCanvasPointer.x, lastCanvasPointer.y);
-                ctx.stroke();
+            if (spaceDrawing) {
+                if (currentTool === 'brush' || currentTool === 'eraser') {
+                    ctx.lineTo(lastCanvasPointer.x, lastCanvasPointer.y);
+                    ctx.stroke();
+                } else {
+                    drawShapeAt(lastCanvasPointer, !!e.shiftKey);
+                }
             }
         }
 
@@ -6755,26 +6877,32 @@ document.addEventListener('DOMContentLoaded', function() {
         function startSpaceStroke() {
             if (!lastCanvasPointer) return;
             if (isDrawing || spaceDrawing) return;
-            if (currentTool !== 'brush' && currentTool !== 'eraser') return;
+            if (currentTool === 'fill') return; // fill is a one-shot action
             spaceDrawing = true;
             isDrawing = true;
             pushHistory();
             startX = lastCanvasPointer.x;
             startY = lastCanvasPointer.y;
-            ctx.beginPath();
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.lineWidth = currentSize;
-            ctx.strokeStyle = (currentTool === 'eraser') ? '#ffffff' : currentColor;
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(startX + 0.01, startY + 0.01); // ensure a single-tap dot
-            ctx.stroke();
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                ctx.beginPath();
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = currentSize;
+                ctx.strokeStyle = (currentTool === 'eraser') ? '#ffffff' : currentColor;
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(startX + 0.01, startY + 0.01); // single-tap dot
+                ctx.stroke();
+            } else {
+                // line / rect / circle — snapshot so we can redraw the preview
+                takeShapeSnapshot();
+            }
         }
 
         function endSpaceStroke() {
             if (!spaceDrawing) return;
             spaceDrawing = false;
             isDrawing = false;
+            snapshotImage = null;
         }
 
         function isAutoDrawOn() {
@@ -6840,11 +6968,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (drawingDialog.style.display !== 'flex') return;
             if (isTextInput(e.target)) return;
 
-            // Ctrl/Cmd + Z → undo (popHistory). Shift+Ctrl+Z would be redo
-            // but we don't have a redo stack, so we just swallow it.
+            // Ctrl/Cmd + Z → undo, Ctrl/Cmd + Shift + Z (or Ctrl + Y) → redo.
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
                 e.preventDefault();
-                if (!e.shiftKey) popHistory();
+                if (e.shiftKey) redoFromStack(); else popHistory();
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                redoFromStack();
                 return;
             }
 
