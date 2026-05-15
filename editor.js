@@ -6085,14 +6085,21 @@ document.addEventListener('DOMContentLoaded', function() {
     })();
 
     // ===== Generic dialog resize (lower-right corner handle) =====
+    // For the drawing dialog specifically, dragging this also grows/shrinks
+    // the inner canvas by the same delta — otherwise the user would have to
+    // resize the dialog and then the canvas separately.
     (function initDialogResize() {
         const handles = document.querySelectorAll('.dialog-resize-corner');
         handles.forEach(handle => {
             const content = handle.closest('.dialog-content');
             if (!content) return;
+            const dialog = handle.closest('.dialog');
+            const innerCanvas = dialog ? dialog.querySelector('#drawing-canvas') : null;
 
             let active = false;
             let start = { x: 0, y: 0, w: 0, h: 0 };
+            let canvasStart = null;
+            let canvasSnapshot = null;
 
             handle.addEventListener('pointerdown', function (e) {
                 e.preventDefault();
@@ -6100,6 +6107,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const rect = content.getBoundingClientRect();
                 active = true;
                 start = { x: e.clientX, y: e.clientY, w: rect.width, h: rect.height };
+                if (innerCanvas) {
+                    canvasStart = { w: innerCanvas.width, h: innerCanvas.height };
+                    canvasSnapshot = document.createElement('canvas');
+                    canvasSnapshot.width = innerCanvas.width;
+                    canvasSnapshot.height = innerCanvas.height;
+                    canvasSnapshot.getContext('2d').drawImage(innerCanvas, 0, 0);
+                }
                 try { handle.setPointerCapture(e.pointerId); } catch (err) {}
             });
 
@@ -6107,14 +6121,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!active) return;
                 e.preventDefault();
                 e.stopPropagation();
-                const newW = Math.max(300, Math.min(window.innerWidth * 0.98,
-                    start.w + (e.clientX - start.x)));
-                const newH = Math.max(240, Math.min(window.innerHeight * 0.95,
-                    start.h + (e.clientY - start.y)));
+                const dx = e.clientX - start.x;
+                const dy = e.clientY - start.y;
+                const newW = Math.max(300, Math.min(window.innerWidth * 0.98, start.w + dx));
+                const newH = Math.max(240, Math.min(window.innerHeight * 0.95, start.h + dy));
                 content.style.width = newW + 'px';
                 content.style.height = newH + 'px';
                 content.style.maxWidth = 'none';
                 content.style.maxHeight = 'none';
+
+                // Drag canvas along with the dialog
+                if (innerCanvas && canvasStart) {
+                    const newCW = Math.max(80, Math.min(4000, canvasStart.w + dx));
+                    const newCH = Math.max(80, Math.min(4000, canvasStart.h + dy));
+                    if (newCW !== innerCanvas.width || newCH !== innerCanvas.height) {
+                        innerCanvas.width = newCW;
+                        innerCanvas.height = newCH;
+                        const cctx = innerCanvas.getContext('2d');
+                        cctx.fillStyle = '#ffffff';
+                        cctx.fillRect(0, 0, newCW, newCH);
+                        if (canvasSnapshot) cctx.drawImage(canvasSnapshot, 0, 0);
+                    }
+                }
             });
 
             function endDialogResize(e) {
@@ -6122,9 +6150,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.preventDefault();
                 e.stopPropagation();
                 active = false;
+                canvasStart = null;
+                canvasSnapshot = null;
                 try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
-                // Swallow the trailing click so it can't trigger any
-                // outside-click handler.
                 blockNextClicks(400);
             }
             handle.addEventListener('pointerup', endDialogResize);
@@ -6697,8 +6725,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             lastCanvasPointer = pointerPos(e);
 
-            // If Space is held, draw a continuous stroke as the mouse moves —
-            // the user doesn't have to press the mouse button at all.
+            // Auto-draw mode: if the pin is on but no stroke is active yet
+            // (e.g. user just toggled on while mouse was elsewhere), kick one
+            // off here so dragging the mouse starts painting right away.
+            if (isAutoDrawOn() && !spaceDrawing && !isDrawing
+                && (currentTool === 'brush' || currentTool === 'eraser')) {
+                startSpaceStroke();
+            }
+
+            // Continuous stroke while auto-draw / Space is active.
             if (spaceDrawing && (currentTool === 'brush' || currentTool === 'eraser')) {
                 ctx.lineTo(lastCanvasPointer.x, lastCanvasPointer.y);
                 ctx.stroke();
@@ -6759,7 +6794,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (autoDrawLabel) autoDrawLabel.classList.remove('active');
                     return;
                 }
-                startSpaceStroke();
+                // Start immediately if the cursor is already over the canvas
+                // (brushCursor is .visible when pointerenter/move has fired
+                // since the last pointerleave).
+                if (brushCursor && brushCursor.classList.contains('visible')) {
+                    startSpaceStroke();
+                }
+                // Otherwise the pointerenter handler on the canvas will
+                // start a stroke when the user next moves the cursor in.
             } else {
                 endSpaceStroke();
             }
@@ -6783,10 +6825,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        // Block Space only inside actual text fields. Checkboxes, color
+        // pickers and range sliders need Space to keep working too, but
+        // they're <input> elements; the previous filter swallowed Space
+        // for them as well and the toggle never fired.
+        function isTextInput(t) {
+            if (!t) return false;
+            if (t.tagName === 'TEXTAREA') return true;
+            if (t.tagName === 'INPUT') {
+                const type = (t.type || '').toLowerCase();
+                return /^(text|search|email|url|tel|number|password|)$/i.test(type) && type !== 'checkbox' && type !== 'color' && type !== 'range';
+            }
+            return t.isContentEditable === true;
+        }
+
         function onDrawingKeyDown(e) {
             if (drawingDialog.style.display !== 'flex') return;
-            const tag = (e.target && e.target.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            if (isTextInput(e.target)) return;
             if (e.code === 'Space') {
                 e.preventDefault();
                 if (!e.repeat && autoDrawCheckbox) {
