@@ -634,7 +634,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         fontSize.addEventListener('change', function() {
-            execCommand('fontSize', false, this.value);
+            const px = parseInt(this.value, 10);
+            if (px > 0) applyFontSizePx(px);
         });
         
         clearFormatBtn.addEventListener('click', function() {
@@ -823,6 +824,55 @@ document.addEventListener('DOMContentLoaded', function() {
         window.addEventListener('resize', updateImageToolbarPosition);
     }
     
+    // Apply an exact pixel font-size to the current selection by wrapping it
+    // in a <span style="font-size: Xpx">. This supports values beyond
+    // execCommand('fontSize')'s 1–7 range so we can go all the way to 1000px.
+    function applyFontSizePx(px) {
+        if (isSourceView) return;
+        editor.focus();
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        if (!editor.contains(range.commonAncestorContainer)) return;
+        if (range.collapsed) return;
+
+        try {
+            const fragment = range.extractContents();
+            // If the extracted fragment already has a single wrapping span
+            // with only font-size set, reuse it to avoid nesting.
+            let wrapper;
+            if (fragment.childNodes.length === 1
+                && fragment.firstChild.nodeType === 1
+                && fragment.firstChild.tagName === 'SPAN'
+                && fragment.firstChild.style
+                && fragment.firstChild.style.fontSize
+                && fragment.firstChild.style.length === 1) {
+                wrapper = fragment.firstChild;
+                wrapper.style.fontSize = px + 'px';
+            } else {
+                wrapper = document.createElement('span');
+                wrapper.style.fontSize = px + 'px';
+                wrapper.appendChild(fragment);
+            }
+            range.insertNode(wrapper);
+
+            // Re-select the wrapper so subsequent toolbar changes apply to it
+            const newRange = document.createRange();
+            newRange.selectNodeContents(wrapper);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+
+            saveHistory();
+            updateToolbarState();
+        } catch (err) {
+            console.error('applyFontSizePx failed, falling back:', err);
+            // Fallback: try execCommand with the closest legacy 1-7 size
+            const legacy = px <= 10 ? '1' : px <= 13 ? '2' : px <= 16 ? '3'
+                : px <= 18 ? '4' : px <= 24 ? '5' : px <= 32 ? '6' : '7';
+            document.execCommand('fontSize', false, legacy);
+        }
+    }
+
     // Execute command
     function execCommand(command, showUI, value) {
         if (isSourceView) return;
@@ -956,15 +1006,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Font family selection error:', e);
             }
             
-            // Update font size select
+            // Update font size select (uses computed pixel size, since our
+            // options are now pixel values instead of execCommand 1-7).
             try {
-                const currentSize = document.queryCommandValue('fontSize');
-                if (currentSize && currentSize.trim() !== '') {
-                    // Find matching option
-                    for (let i = 0; i < fontSize.options.length; i++) {
-                        if (fontSize.options[i].value === currentSize) {
-                            fontSize.selectedIndex = i;
-                            break;
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount > 0) {
+                    let node = sel.getRangeAt(0).startContainer;
+                    if (node && node.nodeType === 3) node = node.parentNode;
+                    if (node && editor.contains(node)) {
+                        const sizePx = parseInt(window.getComputedStyle(node).fontSize, 10);
+                        if (!isNaN(sizePx)) {
+                            for (let i = 0; i < fontSize.options.length; i++) {
+                                if (parseInt(fontSize.options[i].value, 10) === sizePx) {
+                                    fontSize.selectedIndex = i;
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -1393,17 +1450,87 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Parse JSON from localStorage safely. Returns fallback if value is missing or corrupt.
+    function safeJSONParse(raw, fallback) {
+        if (raw == null) return fallback;
+        try {
+            return JSON.parse(raw);
+        } catch (err) {
+            console.warn('safeJSONParse: corrupt JSON, using fallback', err);
+            return fallback;
+        }
+    }
+
+    // Write to localStorage; swallow QuotaExceededError and notify user.
+    function safeLocalStorageSet(key, value) {
+        try {
+            localStorage.setItem(key, value);
+            return true;
+        } catch (err) {
+            const isQuota = err && (err.name === 'QuotaExceededError' ||
+                err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22 || err.code === 1014);
+            console.warn('safeLocalStorageSet: failed to write', key, err);
+            if (isQuota && typeof showNotification === 'function') {
+                showNotification('Lagring full — innholdet er for stort for nettleserens localStorage.', 'error');
+            }
+            return false;
+        }
+    }
+
+    // HTML-escape helpers (used by link/image insertion to avoid XSS)
+    function escapeHtmlAttr(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+    function escapeHtmlText(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+    function sanitizeHref(url) {
+        const t = String(url == null ? '' : url).trim();
+        // Block javascript:, vbscript: and data: text/html schemes from href
+        if (/^\s*(javascript|vbscript)\s*:/i.test(t)) return '#';
+        if (/^\s*data\s*:\s*text\/html/i.test(t)) return '#';
+        return t;
+    }
+    function buildLinkHTML(url, text, target) {
+        const safeHref = escapeHtmlAttr(sanitizeHref(url));
+        const safeText = escapeHtmlText(text);
+        const targetAttr = target ? ` target="${escapeHtmlAttr(target)}" rel="noopener noreferrer"` : '';
+        return `<a href="${safeHref}"${targetAttr}>${safeText}</a>`;
+    }
+    function buildImageHTML(src, alt, width, height) {
+        // Only allow http(s), data:image and relative URLs as image src
+        const rawSrc = String(src == null ? '' : src).trim();
+        let safeSrc = rawSrc;
+        if (/^\s*(javascript|vbscript)\s*:/i.test(rawSrc)) safeSrc = '';
+        if (/^\s*data\s*:/i.test(rawSrc) && !/^\s*data:image\//i.test(rawSrc)) safeSrc = '';
+        const attrs = [
+            `src="${escapeHtmlAttr(safeSrc)}"`,
+            `alt="${escapeHtmlAttr(alt)}"`,
+            `width="${escapeHtmlAttr(width)}"`,
+            `height="${escapeHtmlAttr(height)}"`,
+        ];
+        return `<img ${attrs.join(' ')}>`;
+    }
+
     // Insert link with precise selection handling
     function insertLink() {
         const url = linkUrl.value.trim();
         const text = linkText.value.trim() || url;
         const target = linkTarget.checked ? '_blank' : '';
-        
+
         console.log(`Link insertion - URL: ${url}, Text: ${text}, Target: ${target ? '_blank' : 'same window'}`);
-        
+
         if (url) {
             if (isSourceView) {
-                const linkHTML = `<a href="${url}"${target ? ` target="${target}"` : ''}>${text}</a>`;
+                const linkHTML = buildLinkHTML(url, text, target);
                 insertAtCursor(htmlSource, linkHTML);
                 console.log('Inserted link in source view');
             } else {
@@ -1412,7 +1539,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     editor.focus();
                     
                     // Create the link HTML that we'll insert
-                    const linkHTML = `<a href="${url}"${target ? ` target="${target}"` : ''}>${text}</a>`;
+                    const linkHTML = buildLinkHTML(url, text, target);
                     
                     // First find any highlight spans before removing them
                     const highlightSpans = document.querySelectorAll('.selection-highlight, span[style*="background-color: rgb(255, 255, 128)"]');
@@ -1577,7 +1704,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Last resort fallback
                     try {
-                        const linkHTML = `<a href="${url}"${target ? ` target="${target}"` : ''}>${text}</a>`;
+                        const linkHTML = buildLinkHTML(url, text, target);
                         
                         // Just append to the end of the editor
                         editor.innerHTML += linkHTML;
@@ -1629,7 +1756,9 @@ document.addEventListener('DOMContentLoaded', function() {
         imageFileInput.setAttribute('accept', 'image/*');
         // Prevent keyboard on mobile
         imageFileInput.setAttribute('readonly', 'readonly');
-        imageFileInput.addEventListener('click', function(e) {
+        // Use .onclick (not addEventListener) so repeated dialog opens overwrite
+        // the handler instead of stacking multiple file pickers per click.
+        imageFileInput.onclick = function(e) {
             // Prevent keyboard on iOS
             e.preventDefault();
             // Use a hidden input for actual file selection
@@ -1640,14 +1769,14 @@ document.addEventListener('DOMContentLoaded', function() {
             hiddenInput.style.position = 'absolute';
             hiddenInput.style.left = '-9999px';
             document.body.appendChild(hiddenInput);
-            
-            hiddenInput.addEventListener('change', function(e) {
-                handleImageFileSelect(e);
+
+            hiddenInput.addEventListener('change', function(ev) {
+                handleImageFileSelect(ev);
                 document.body.removeChild(hiddenInput);
             });
-            
+
             hiddenInput.click();
-        });
+        };
 
         // Add drag and drop functionality
         const dialogContent = imageDialog.querySelector('.dialog-content');
@@ -1805,7 +1934,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Image insertion - Alt: ${alt}, Width: ${width}, Height: ${height}`);
         
         if (url) {
-            const imgHTML = `<img src="${url}" alt="${alt}" width="${width}" height="${height}">`;
+            const imgHTML = buildImageHTML(url, alt, width, height);
             
             if (isSourceView) {
                 insertAtCursor(htmlSource, imgHTML);
@@ -2231,6 +2360,8 @@ document.addEventListener('DOMContentLoaded', function() {
         imageDialog.style.display = 'none';
         tableDialog.style.display = 'none';
         emojiDialog.style.display = 'none';
+        const drawDlg = document.getElementById('drawing-dialog');
+        if (drawDlg) drawDlg.style.display = 'none';
         
         // Clear dialog inputs
         linkUrl.value = '';
@@ -2287,7 +2418,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let filename = filenameInput.value.trim();
         
         // Check if auto-date setting is enabled
-        const settings = JSON.parse(localStorage.getItem('editorSettings')) || {};
+        const settings = safeJSONParse(localStorage.getItem('editorSettings'), {});
         if (settings.autoDate) {
             // Add date to filename
             const now = new Date();
@@ -2322,9 +2453,9 @@ document.addEventListener('DOMContentLoaded', function() {
         hideFilenameInput();
         
         // Also save to localStorage
-        localStorage.setItem('editorContent', content);
+        safeLocalStorageSet('editorContent', content);
     }
-    
+
     // Save current state to history
     function saveHistory() {
         const content = isSourceView ? htmlSource.value : editor.innerHTML;
@@ -2435,18 +2566,40 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             editor.addEventListener('mousemove', handlePipetteHover);
+            editor.addEventListener('mouseleave', handlePipetteMouseLeave);
             editor.addEventListener('click', handlePipettePick);
         } else {
             console.log('Pipette deactivated');
             editor.removeEventListener('mousemove', handlePipetteHover);
+            editor.removeEventListener('mouseleave', handlePipetteMouseLeave);
             editor.removeEventListener('click', handlePipettePick);
-            
+
+            // Cancel any pending hover-debounce so it doesn't re-add the outline
+            if (pipetteDebounceTimer) {
+                clearTimeout(pipetteDebounceTimer);
+                pipetteDebounceTimer = null;
+            }
+            lastPipetteElement = null;
+
+            // Make sure the dashed outline preview is gone (the bug: it used to linger)
+            clearPipettePreview();
+
             // Clean up any stored selection highlights without applying styles
             clearStoredSelectionHighlight(false);
-            
+
             // Reset combined styles when deactivating
             window.combinedPipetteStyles = null;
         }
+    }
+
+    // Clear the pipette outline when the mouse leaves the editor
+    function handlePipetteMouseLeave() {
+        if (pipetteDebounceTimer) {
+            clearTimeout(pipetteDebounceTimer);
+            pipetteDebounceTimer = null;
+        }
+        lastPipetteElement = null;
+        clearPipettePreview();
     }
     
     // Handle pipette hovering
@@ -3121,10 +3274,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Clear any pipette preview highlights
+    // Clear any pipette preview highlights.
+    // Query the whole document, not just the editor, so a lingering outline on
+    // an element that has been moved/detached still gets cleaned up.
     function clearPipettePreview() {
-        const highlighted = editor.querySelectorAll('.pipette-preview');
-        highlighted.forEach(el => el.classList.remove('pipette-preview'));
+        document.querySelectorAll('.pipette-preview').forEach(el => {
+            el.classList.remove('pipette-preview');
+        });
     }
     
     // Load content
@@ -3179,7 +3335,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 saveHistory();
                 
                 // Save to localStorage
-                localStorage.setItem('editorContent', bodyContent);
+                safeLocalStorageSet('editorContent', bodyContent);
                 
                 // Hide the clear all button after loading content
                 const clearAllBtn = document.getElementById('clear-all-btn');
@@ -3515,7 +3671,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Save to local storage
-        localStorage.setItem('recentEmojis', JSON.stringify(recentEmojisList));
+        safeLocalStorageSet('recentEmojis', JSON.stringify(recentEmojisList));
     }
     
     // Load recently used emojis
@@ -3526,7 +3682,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Try to get from local storage
         const storedEmojis = localStorage.getItem('recentEmojis');
         if (storedEmojis) {
-            recentEmojisList = JSON.parse(storedEmojis);
+            const parsed = safeJSONParse(storedEmojis, null);
+            if (Array.isArray(parsed)) {
+                recentEmojisList = parsed;
+            }
         }
         
         // If no recent emojis, hide the section
@@ -4359,10 +4518,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Function to setup auto-save
     function setupAutoSave() {
-        // Auto-save content to localStorage when changes are made
+        // Auto-save content to localStorage when changes are made.
+        // We only want to notify the user about quota errors once per session —
+        // the auto-save fires on every input event and would otherwise spam.
+        let quotaNotified = false;
         const saveToLocalStorage = () => {
             const content = isSourceView ? htmlSource.value : editor.innerHTML;
-            localStorage.setItem('editorContent', content);
+            try {
+                localStorage.setItem('editorContent', content);
+            } catch (err) {
+                if (!quotaNotified) {
+                    quotaNotified = true;
+                    console.warn('Auto-save failed (likely quota exceeded):', err);
+                    if (typeof showNotification === 'function') {
+                        showNotification('Auto-lagring stoppet — innholdet er for stort for localStorage.', 'error');
+                    }
+                }
+            }
         };
         
         // Save content when user types or makes changes
@@ -4401,13 +4573,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load settings from localStorage
     function loadSettings() {
-        const settings = JSON.parse(localStorage.getItem('editorSettings')) || {
+        const settings = safeJSONParse(localStorage.getItem('editorSettings'), {
             autoDate: false,
             showWords: true,
             showChars: true,
             showLineNumbers: false,
             pageWidth: 'a4' // Default to A4
-        };
+        });
         
         // Apply settings to UI
         document.getElementById('setting-auto-date').checked = settings.autoDate;
@@ -4457,7 +4629,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         // Save to localStorage
-        localStorage.setItem('editorSettings', JSON.stringify(settings));
+        safeLocalStorageSet('editorSettings', JSON.stringify(settings));
         
         // Apply settings
         applySettings(settings);
@@ -5628,130 +5800,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Add print functionality
     function handlePrint() {
-        // Create a new window for printing
-        const printWindow = window.open('', '_blank');
-        
-        // Get the editor content
-        const content = editor.innerHTML;
-        
-        // Get current page width setting from localStorage
-        const settings = JSON.parse(localStorage.getItem('editorSettings')) || {};
+        // Set the @page size dynamically based on the user's page-width setting.
+        // The rest of the print layout (hiding toolbar/footer, margins, etc.)
+        // lives in styles.css under @media print, so the browser's own print
+        // preview is what the user sees — no second window.
+        const settings = safeJSONParse(localStorage.getItem('editorSettings'), {});
         const pageWidth = settings.pageWidth || 'a4';
-        
-        // Define page dimensions
-        const pageDimensions = {
-            a4: {
-                width: '210mm',
-                height: '297mm'
-            },
-            letter: {
-                width: '216mm',
-                height: '279mm'
+
+        let pageStyle = document.getElementById('peng-dynamic-print-style');
+        if (!pageStyle) {
+            pageStyle = document.createElement('style');
+            pageStyle.id = 'peng-dynamic-print-style';
+            document.head.appendChild(pageStyle);
+        }
+        const pageSize = (pageWidth === 'none') ? 'auto' : (pageWidth + ' portrait');
+        pageStyle.textContent = `@page { size: ${pageSize}; margin: 18mm 16mm; }`;
+
+        // If the user is in source view, sync the editor first so the printed
+        // output reflects the edited HTML rather than the raw textarea.
+        if (isSourceView) {
+            try {
+                editor.innerHTML = base64Storage.expandPlaceholders(htmlSource.value);
+            } catch (err) {
+                console.warn('Print: failed to sync from source view', err);
             }
-        };
-        
-        // Get the dimensions for the current page format
-        const currentPageDims = pageWidth !== 'none' ? pageDimensions[pageWidth] : null;
-        
-        // Create a styled document for printing
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Print Preview</title>
-                <style>
-                    @page {
-                        size: ${pageWidth === 'none' ? 'auto' : pageWidth + ' portrait'};
-                        margin: 0;
-                    }
-                    body {
-                        font-family: Arial, sans-serif;
-                        line-height: 1.2;
-                        margin: 0;
-                        padding: 0;
-                        color: #000;
-                        background: white;
-                    }
-                    .content-wrapper {
-                        ${currentPageDims ? `
-                            width: ${currentPageDims.width};
-                            margin: 0;
-                            background: white;
-                            position: relative;
-                            box-sizing: border-box;
-                            padding: 0;
-                        ` : `
-                            margin: 0;
-                        `}
-                        position: relative;
-                    }
-                    img {
-                        position: relative;
-                        page-break-inside: avoid;
-                        max-width: 100% !important;
-                        height: auto !important;
-                        width: auto !important;
-                    }
-                    .image-wrapper {
-                        break-inside: avoid;
-                        page-break-inside: avoid;
-                        max-width: 100% !important;
-                    }
-                    .image-wrapper.absolute {
-                        position: absolute;
-                    }
-                    @media print {
-                        html, body {
-                            width: 100% !important;
-                            height: 100% !important;
-                            margin: 0 !important;
-                            padding: 0 !important;
-                        }
-                        .content-wrapper {
-                            position: relative;
-                            height: 100%;
-                            width: 100% !important;
-                            margin: 0 !important;
-                            padding: 0 !important;
-                        }
-                        .image-wrapper {
-                            position: relative;
-                            page-break-inside: avoid;
-                            max-width: 100% !important;
-                        }
-                        img {
-                            max-width: 100% !important;
-                            height: auto !important;
-                            width: auto !important;
-                        }
-                    }
-                    @media only screen and (max-width: 768px) {
-                        .content-wrapper {
-                            width: 100% !important;
-                            margin: 0 !important;
-                            padding: 0 !important;
-                        }
-                        img {
-                            max-width: 100% !important;
-                            height: auto !important;
-                            width: auto !important;
-                        }
-                        .image-wrapper {
-                            max-width: 100% !important;
-                        }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="content-wrapper">
-                    ${content}
-                </div>
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
+        }
+
+        window.print();
     }
 
     // Function to move selected content
@@ -5840,26 +5915,21 @@ document.addEventListener('DOMContentLoaded', function() {
     editor.addEventListener('mouseup', updateMovementButtonsVisibility);
     editor.addEventListener('keyup', updateMovementButtonsVisibility);
 
-    // Add touch event handlers for mobile
-    document.addEventListener('DOMContentLoaded', function() {
-        // ... existing DOMContentLoaded code ...
-        
-        // Add touch events for images
-        editor.addEventListener('touchstart', function(e) {
-            const clickedImage = e.target.closest('img');
-            if (clickedImage) {
-                e.preventDefault(); // Prevent zoom/scroll
-                handleImageClick(e);
-            }
-        }, { passive: false });
-        
-        editor.addEventListener('touchend', function(e) {
-            const clickedImage = e.target.closest('img');
-            if (clickedImage) {
-                e.preventDefault();
-            }
-        }, { passive: false });
-    });
+    // Add touch event handlers for mobile (images)
+    editor.addEventListener('touchstart', function(e) {
+        const clickedImage = e.target.closest('img');
+        if (clickedImage) {
+            e.preventDefault(); // Prevent zoom/scroll
+            handleImageClick(e);
+        }
+    }, { passive: false });
+
+    editor.addEventListener('touchend', function(e) {
+        const clickedImage = e.target.closest('img');
+        if (clickedImage) {
+            e.preventDefault();
+        }
+    }, { passive: false });
 
     // Function to reapply draggable to floating images
     function reapplyDraggableToFloatingImages() {
@@ -5868,4 +5938,309 @@ document.addEventListener('DOMContentLoaded', function() {
             makeWrapperDraggable(wrapper);
         });
     }
-}); 
+
+    // ===== Drawing module (mspaint-style canvas drawing) =====
+    (function initDrawingModule() {
+        const drawBtn = document.getElementById('draw-btn');
+        const drawingDialog = document.getElementById('drawing-dialog');
+        if (!drawBtn || !drawingDialog) return;
+
+        const canvas = document.getElementById('drawing-canvas');
+        const ctx = canvas.getContext('2d');
+        const colorInput = document.getElementById('drawing-color');
+        const sizeInput = document.getElementById('drawing-size');
+        const sizeLabel = document.getElementById('drawing-size-label');
+        const undoBtnDraw = document.getElementById('drawing-undo-btn');
+        const clearBtnDraw = document.getElementById('drawing-clear-btn');
+        const saveBtnDraw = document.getElementById('drawing-save-btn');
+        const cancelBtnDraw = document.getElementById('drawing-cancel-btn');
+        const toolButtons = drawingDialog.querySelectorAll('.drawing-tool');
+        const titleEl = document.getElementById('drawing-dialog-title');
+        const closeBtnDraw = drawingDialog.querySelector('.close-dialog');
+
+        let currentTool = 'brush';
+        let currentColor = colorInput.value || '#000000';
+        let currentSize = parseInt(sizeInput.value, 10) || 4;
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+        let snapshotImage = null;
+        let drawingHistory = [];
+        let editingImage = null;
+        const MAX_DRAWING_HISTORY = 30;
+
+        function pushHistory() {
+            try {
+                drawingHistory.push(canvas.toDataURL('image/png'));
+                if (drawingHistory.length > MAX_DRAWING_HISTORY) drawingHistory.shift();
+            } catch (err) {
+                console.warn('Drawing snapshot failed:', err);
+            }
+        }
+
+        function popHistory() {
+            const data = drawingHistory.pop();
+            if (!data) return;
+            const img = new Image();
+            img.onload = function () {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = data;
+        }
+
+        function setActiveTool(tool) {
+            currentTool = tool;
+            toolButtons.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+        }
+
+        function pointerPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY,
+            };
+        }
+
+        function takeShapeSnapshot() {
+            try {
+                snapshotImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            } catch (err) {
+                snapshotImage = null;
+            }
+        }
+
+        function restoreShapeSnapshot() {
+            if (snapshotImage) ctx.putImageData(snapshotImage, 0, 0);
+        }
+
+        function clearCanvas() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function hexToRgba(hex) {
+            const clean = String(hex || '#000000').replace('#', '');
+            const v = parseInt(clean.length === 3
+                ? clean.split('').map(c => c + c).join('')
+                : clean, 16);
+            return [(v >> 16) & 255, (v >> 8) & 255, v & 255, 255];
+        }
+
+        function floodFill(sx, sy, fillRgba) {
+            const w = canvas.width, h = canvas.height;
+            let imgData;
+            try {
+                imgData = ctx.getImageData(0, 0, w, h);
+            } catch (err) {
+                showNotification('Kunne ikke fylle (canvas blokkert)', 'error');
+                return;
+            }
+            const data = imgData.data;
+            const at = (x, y) => (y * w + x) * 4;
+            const i0 = at(sx, sy);
+            const target = [data[i0], data[i0 + 1], data[i0 + 2], data[i0 + 3]];
+            if (target[0] === fillRgba[0] && target[1] === fillRgba[1]
+                && target[2] === fillRgba[2] && target[3] === fillRgba[3]) return;
+            const stack = [[sx, sy]];
+            while (stack.length) {
+                const [x, y] = stack.pop();
+                if (x < 0 || x >= w || y < 0 || y >= h) continue;
+                const i = at(x, y);
+                if (data[i] !== target[0] || data[i + 1] !== target[1]
+                    || data[i + 2] !== target[2] || data[i + 3] !== target[3]) continue;
+                data[i] = fillRgba[0];
+                data[i + 1] = fillRgba[1];
+                data[i + 2] = fillRgba[2];
+                data[i + 3] = fillRgba[3];
+                stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function onPointerDown(e) {
+            e.preventDefault();
+            try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+            const p = pointerPos(e);
+            if (currentTool === 'fill') {
+                pushHistory();
+                floodFill(Math.floor(p.x), Math.floor(p.y), hexToRgba(currentColor));
+                return;
+            }
+            pushHistory();
+            isDrawing = true;
+            startX = p.x; startY = p.y;
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                ctx.beginPath();
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = currentSize;
+                ctx.strokeStyle = (currentTool === 'eraser') ? '#ffffff' : currentColor;
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(startX + 0.01, startY + 0.01); // ensure single tap dots
+                ctx.stroke();
+            } else {
+                takeShapeSnapshot();
+            }
+        }
+
+        function onPointerMove(e) {
+            if (!isDrawing) return;
+            const p = pointerPos(e);
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+            } else if (currentTool === 'line') {
+                restoreShapeSnapshot();
+                ctx.beginPath();
+                ctx.lineWidth = currentSize;
+                ctx.strokeStyle = currentColor;
+                ctx.lineCap = 'round';
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+            } else if (currentTool === 'rect') {
+                restoreShapeSnapshot();
+                ctx.lineWidth = currentSize;
+                ctx.strokeStyle = currentColor;
+                ctx.strokeRect(startX, startY, p.x - startX, p.y - startY);
+            } else if (currentTool === 'circle') {
+                restoreShapeSnapshot();
+                ctx.beginPath();
+                ctx.lineWidth = currentSize;
+                ctx.strokeStyle = currentColor;
+                const rx = (p.x - startX) / 2;
+                const ry = (p.y - startY) / 2;
+                ctx.ellipse(startX + rx, startY + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function onPointerUp(e) {
+            if (!isDrawing) return;
+            isDrawing = false;
+            snapshotImage = null;
+            try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+        }
+
+        canvas.addEventListener('pointerdown', onPointerDown);
+        canvas.addEventListener('pointermove', onPointerMove);
+        canvas.addEventListener('pointerup', onPointerUp);
+        canvas.addEventListener('pointercancel', onPointerUp);
+        canvas.addEventListener('pointerleave', onPointerUp);
+
+        toolButtons.forEach(b => b.addEventListener('click', () => setActiveTool(b.dataset.tool)));
+
+        colorInput.addEventListener('input', () => { currentColor = colorInput.value; });
+        sizeInput.addEventListener('input', () => {
+            currentSize = parseInt(sizeInput.value, 10) || 1;
+            sizeLabel.textContent = currentSize;
+        });
+
+        undoBtnDraw.addEventListener('click', popHistory);
+        clearBtnDraw.addEventListener('click', () => {
+            pushHistory();
+            clearCanvas();
+        });
+
+        function openDrawingDialog(existingImg) {
+            editingImage = existingImg || null;
+            titleEl.textContent = existingImg ? 'Rediger tegning' : 'Tegne';
+            drawingHistory = [];
+
+            if (existingImg) {
+                const w = existingImg.naturalWidth || existingImg.width || 640;
+                const h = existingImg.naturalHeight || existingImg.height || 420;
+                canvas.width = Math.min(w, 2000);
+                canvas.height = Math.min(h, 2000);
+                clearCanvas();
+                const tmp = new Image();
+                tmp.onload = () => ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+                tmp.onerror = () => clearCanvas();
+                tmp.src = existingImg.src;
+            } else {
+                canvas.width = 640;
+                canvas.height = 420;
+                clearCanvas();
+            }
+
+            setActiveTool('brush');
+            sizeLabel.textContent = currentSize;
+            drawingDialog.style.display = 'flex';
+        }
+
+        function closeDrawingDialog() {
+            drawingDialog.style.display = 'none';
+            editingImage = null;
+            drawingHistory = [];
+        }
+
+        function saveDrawing() {
+            let dataUrl;
+            try {
+                dataUrl = canvas.toDataURL('image/png');
+            } catch (err) {
+                console.error('Failed to export drawing:', err);
+                showNotification('Kunne ikke lagre tegningen', 'error');
+                return;
+            }
+            if (editingImage && editingImage.parentNode) {
+                editingImage.src = dataUrl;
+                editingImage.classList.add('peng-drawing');
+                editingImage.setAttribute('data-peng-drawing', 'true');
+                editingImage.setAttribute('width', canvas.width);
+                editingImage.setAttribute('height', canvas.height);
+            } else {
+                const img = document.createElement('img');
+                img.src = dataUrl;
+                img.className = 'peng-drawing';
+                img.setAttribute('data-peng-drawing', 'true');
+                img.setAttribute('alt', 'Tegning');
+                img.setAttribute('width', canvas.width);
+                img.setAttribute('height', canvas.height);
+                img.style.maxWidth = '100%';
+                insertImageAtSelection(img);
+            }
+            closeDrawingDialog();
+            try { saveHistory(); } catch (err) {}
+            try { updateWordCount(); } catch (err) {}
+        }
+
+        function insertImageAtSelection(img) {
+            editor.focus();
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0
+                && editor.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+                const range = sel.getRangeAt(0);
+                range.deleteContents();
+                range.insertNode(img);
+                range.setStartAfter(img);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            } else {
+                editor.appendChild(img);
+            }
+        }
+
+        saveBtnDraw.addEventListener('click', saveDrawing);
+        cancelBtnDraw.addEventListener('click', closeDrawingDialog);
+        if (closeBtnDraw) closeBtnDraw.addEventListener('click', closeDrawingDialog);
+
+        drawBtn.addEventListener('click', () => openDrawingDialog(null));
+
+        // Re-edit an existing drawing by double-clicking it
+        editor.addEventListener('dblclick', function (e) {
+            const img = e.target.closest('img.peng-drawing, img[data-peng-drawing="true"]');
+            if (img) {
+                e.preventDefault();
+                e.stopPropagation();
+                openDrawingDialog(img);
+            }
+        });
+
+        // Initial paint
+        clearCanvas();
+    })();
+});

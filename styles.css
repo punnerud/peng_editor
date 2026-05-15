@@ -1405,4 +1405,225 @@ body {
         min-height: 40px;
         margin: 2px;
     }
-} 
+}
+
+/* ===== Drawing dialog (mspaint-style) ===== */
+.drawing-dialog-content {
+    min-width: 0;
+    max-width: 95vw;
+    width: auto;
+    padding: 16px 18px;
+}
+
+.drawing-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 10px 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.drawing-tool-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.drawing-toolbar .drawing-tool,
+.drawing-toolbar #drawing-undo-btn,
+.drawing-toolbar #drawing-clear-btn {
+    background-color: #f4f4f4;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-weight: normal;
+    cursor: pointer;
+    margin: 0;
+    min-width: 36px;
+}
+
+.drawing-toolbar .drawing-tool:hover,
+.drawing-toolbar #drawing-undo-btn:hover,
+.drawing-toolbar #drawing-clear-btn:hover {
+    background-color: #e8e8e8;
+}
+
+.drawing-toolbar .drawing-tool.active {
+    background-color: #2daadb;
+    color: #fff;
+    border-color: #1a8fbf;
+}
+
+.drawing-color-label {
+    display: inline-flex;
+    align-items: center;
+}
+
+.drawing-color-label input[type="color"] {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 2px;
+    cursor: pointer;
+    background-color: #fff;
+}
+
+#drawing-size {
+    width: 120px;
+}
+
+#drawing-size-label {
+    display: inline-block;
+    min-width: 28px;
+    text-align: center;
+    font-size: 13px;
+    color: #555;
+}
+
+.drawing-canvas-wrapper {
+    border: 1px solid #ccc;
+    background-color: #fff;
+    max-width: 100%;
+    max-height: 65vh;
+    overflow: auto;
+    display: inline-block;
+    background-image:
+        linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
+        linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #f0f0f0 75%),
+        linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+#drawing-canvas {
+    display: block;
+    cursor: crosshair;
+    touch-action: none;
+    background-color: #fff;
+}
+
+.drawing-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 14px;
+}
+
+.drawing-actions button {
+    margin: 0;
+}
+
+#drawing-cancel-btn {
+    background-color: #888 !important;
+}
+
+#drawing-cancel-btn:hover {
+    background-color: #6e6e6e !important;
+}
+
+#editor img.peng-drawing {
+    cursor: pointer;
+    border: 1px dashed transparent;
+    transition: border-color 0.15s;
+}
+
+#editor img.peng-drawing:hover {
+    border-color: #2daadb;
+}
+
+@media (max-width: 600px) {
+    .drawing-toolbar {
+        gap: 6px;
+    }
+    #drawing-size {
+        width: 80px;
+    }
+}
+
+/* ===== Print layout ===== */
+@media print {
+    @page {
+        margin: 18mm 16mm;
+    }
+
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    /* Hide all editor chrome */
+    .toolbar-container,
+    .editor-footer,
+    .notification-area,
+    #dialogs,
+    .resize-handle,
+    .drag-handle,
+    .selection-controls,
+    #html-source {
+        display: none !important;
+    }
+
+    .editor-container {
+        background: #fff !important;
+        box-shadow: none !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: none !important;
+    }
+
+    .editor-main {
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    #editor {
+        display: block !important;
+        background: #fff !important;
+        box-shadow: none !important;
+        border: none !important;
+        outline: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        max-width: 100% !important;
+        color: #000 !important;
+    }
+
+    /* Keep links readable but lose the hover/focus chrome */
+    #editor a {
+        color: #000;
+        text-decoration: underline;
+    }
+
+    /* Avoid awkward breaks inside common blocks */
+    #editor img,
+    #editor table,
+    #editor pre,
+    #editor blockquote,
+    .image-wrapper {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    /* Don't orphan headings at the bottom of a page */
+    #editor h1,
+    #editor h2,
+    #editor h3,
+    #editor h4,
+    #editor h5,
+    #editor h6 {
+        page-break-after: avoid;
+        break-after: avoid;
+    }
+}

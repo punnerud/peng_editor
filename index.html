@@ -96,6 +96,7 @@
                     <button id="table-btn" title="Insert Table"><i class="fas fa-table"></i></button>
                     <button id="code-btn" title="Insert Code"><i class="fas fa-code"></i></button>
                     <button id="emoji-btn" title="Insert Emoji"><i class="far fa-smile"></i></button>
+                    <button id="draw-btn" title="Tegne"><i class="fas fa-paint-brush"></i></button>
                 </div>
                 <div class="toolbar-group">
                     <input type="color" id="forecolor-picker" title="Text Color">
@@ -111,13 +112,22 @@
                         <option value="'Helvetica Neue', Helvetica, sans-serif">Helvetica</option>
                     </select>
                     <select id="font-size">
-                        <option value="1">8pt</option>
-                        <option value="2">10pt</option>
-                        <option value="3" selected>12pt</option>
-                        <option value="4">14pt</option>
-                        <option value="5">18pt</option>
-                        <option value="6">24pt</option>
-                        <option value="7">36pt</option>
+                        <option value="8" style="font-size: 8px">8px</option>
+                        <option value="10" style="font-size: 10px">10px</option>
+                        <option value="12" style="font-size: 12px">12px</option>
+                        <option value="14" style="font-size: 14px">14px</option>
+                        <option value="16" style="font-size: 16px" selected>16px</option>
+                        <option value="18" style="font-size: 18px">18px</option>
+                        <option value="20" style="font-size: 20px">20px</option>
+                        <option value="24" style="font-size: 24px">24px</option>
+                        <option value="32">32px</option>
+                        <option value="48">48px</option>
+                        <option value="64">64px</option>
+                        <option value="96">96px</option>
+                        <option value="150">150px</option>
+                        <option value="250">250px</option>
+                        <option value="500">500px</option>
+                        <option value="1000">1000px</option>
                     </select>
                 </div>
                 <div class="toolbar-group">
@@ -268,6 +278,41 @@
             </div>
         </div>
         
+        <div id="drawing-dialog" class="dialog">
+            <div class="dialog-content drawing-dialog-content">
+                <span class="close-dialog">&times;</span>
+                <h3 id="drawing-dialog-title">Tegne</h3>
+                <div class="drawing-toolbar">
+                    <div class="drawing-tool-group">
+                        <button type="button" class="drawing-tool active" data-tool="brush" title="Pensel"><i class="fas fa-paint-brush"></i></button>
+                        <button type="button" class="drawing-tool" data-tool="eraser" title="Viskelær"><i class="fas fa-eraser"></i></button>
+                        <button type="button" class="drawing-tool" data-tool="line" title="Linje"><i class="fas fa-minus"></i></button>
+                        <button type="button" class="drawing-tool" data-tool="rect" title="Rektangel"><i class="far fa-square"></i></button>
+                        <button type="button" class="drawing-tool" data-tool="circle" title="Sirkel"><i class="far fa-circle"></i></button>
+                        <button type="button" class="drawing-tool" data-tool="fill" title="Fyllbøtte"><i class="fas fa-fill-drip"></i></button>
+                    </div>
+                    <div class="drawing-tool-group">
+                        <label class="drawing-color-label" title="Farge">
+                            <input type="color" id="drawing-color" value="#000000">
+                        </label>
+                        <input type="range" id="drawing-size" min="1" max="80" value="4" title="Størrelse">
+                        <span id="drawing-size-label">4</span>
+                    </div>
+                    <div class="drawing-tool-group">
+                        <button type="button" id="drawing-undo-btn" title="Angre"><i class="fas fa-undo"></i></button>
+                        <button type="button" id="drawing-clear-btn" title="Tøm"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                <div class="drawing-canvas-wrapper">
+                    <canvas id="drawing-canvas" width="640" height="420"></canvas>
+                </div>
+                <div class="drawing-actions">
+                    <button type="button" id="drawing-save-btn">Sett inn</button>
+                    <button type="button" id="drawing-cancel-btn">Avbryt</button>
+                </div>
+            </div>
+        </div>
+
         <div id="settings-dialog" class="dialog">
             <div class="dialog-content">
                 <span class="close-dialog">&times;</span>
