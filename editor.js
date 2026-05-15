@@ -1107,13 +1107,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
                 
-                // Verify we got a valid background color and update the picker
+                // Verify we got a valid background color and update the picker.
+                // If the selection has no real highlight, keep whatever the
+                // user last picked rather than forcing the picker (and the
+                // preview that reflects it) to white.
                 if (currentBgColor && currentBgColor !== 'rgba(0, 0, 0, 0)' && currentBgColor !== 'transparent') {
                     backcolorPicker.value = rgbToHex(currentBgColor);
                     console.log('Updated background color picker to:', backcolorPicker.value);
-                } else {
-                    // Reset to default if no background color is found
-                    backcolorPicker.value = '#ffffff';
                 }
             } catch (e) {
                 console.log('Color picker update error:', e);
@@ -6045,8 +6045,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const preview = document.getElementById('color-preview');
         const cellFore = document.getElementById('color-cell-fore');
         const cellBack = document.getElementById('color-cell-back');
-        const recentForeEl = document.getElementById('recent-fore');
-        const recentBackEl = document.getElementById('recent-back');
+        const recentColorsEl = document.getElementById('recent-colors');
 
         // Last 5 colors picked, shared between text and background. Stored in
         // sessionStorage so they persist across dialog opens within a tab.
@@ -6077,32 +6076,37 @@ document.addEventListener('DOMContentLoaded', function() {
             renderRecent();
         }
 
+        function applyForeColor(hex) {
+            forecolorPicker.value = hex;
+            restoreColorSelection();
+            execCommand('foreColor', false, hex);
+            syncColorPreview();
+        }
+
+        function applyBackColor(hex) {
+            backcolorPicker.value = hex;
+            restoreColorSelection();
+            execCommand('hiliteColor', false, hex);
+            syncColorPreview();
+        }
+
         function renderRecent() {
-            [
-                { el: recentForeEl, apply: (hex) => {
-                    forecolorPicker.value = hex;
-                    restoreColorSelection();
-                    execCommand('foreColor', false, hex);
-                    syncColorPreview();
-                }},
-                { el: recentBackEl, apply: (hex) => {
-                    backcolorPicker.value = hex;
-                    restoreColorSelection();
-                    execCommand('hiliteColor', false, hex);
-                    syncColorPreview();
-                }}
-            ].forEach(({ el, apply }) => {
-                if (!el) return;
-                el.innerHTML = '';
-                recentColors.forEach(hex => {
-                    const btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'recent-color';
-                    btn.style.backgroundColor = hex;
-                    btn.title = hex;
-                    btn.addEventListener('click', () => apply(hex));
-                    el.appendChild(btn);
+            if (!recentColorsEl) return;
+            recentColorsEl.innerHTML = '';
+            recentColors.forEach(hex => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'recent-color';
+                btn.style.backgroundColor = hex;
+                btn.title = hex + ' (klikk = tekst, høyreklikk = bakgrunn)';
+                btn.addEventListener('click', (e) => {
+                    if (e.altKey) applyBackColor(hex); else applyForeColor(hex);
                 });
+                btn.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    applyBackColor(hex);
+                });
+                recentColorsEl.appendChild(btn);
             });
         }
 

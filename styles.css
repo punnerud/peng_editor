@@ -1619,12 +1619,14 @@ body {
     background-color: #fff;
 }
 
-/* Recent-colors row beneath each picker: up to 5 small swatches the user
-   recently picked. Click one to reuse it. */
+/* Shared row of the 5 most recently picked colours. Click → reuse as text
+   colour. Right-click (or alt-click) → reuse as background colour. */
 .recent-colors {
     display: flex;
-    gap: 4px;
-    margin-top: 6px;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin: 12px 0 0;
     min-height: 22px;
 }
 
