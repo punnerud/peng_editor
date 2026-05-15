@@ -6399,6 +6399,41 @@ document.addEventListener('DOMContentLoaded', function() {
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
+        // Size the canvas via CSS so it always fits inside the wrapper while
+        // preserving its native aspect ratio. The canvas pixel size (the
+        // width/height attributes) is untouched — pointerPos() handles the
+        // display-to-pixel mapping.
+        function fitCanvasDisplay() {
+            if (!canvasWrapper || !canvas) return;
+            const cs = window.getComputedStyle(canvasWrapper);
+            const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+            const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+            const availW = canvasWrapper.clientWidth - padX;
+            const availH = canvasWrapper.clientHeight - padY;
+            if (availW <= 0 || availH <= 0 || canvas.width <= 0 || canvas.height <= 0) return;
+            const aspect = canvas.width / canvas.height;
+            let dispW = availW;
+            let dispH = dispW / aspect;
+            if (dispH > availH) {
+                dispH = availH;
+                dispW = dispH * aspect;
+            }
+            // Don't enlarge beyond native pixel size — looks blurry.
+            if (dispW > canvas.width) {
+                dispW = canvas.width;
+                dispH = canvas.height;
+            }
+            canvas.style.width = dispW + 'px';
+            canvas.style.height = dispH + 'px';
+        }
+
+        // Keep canvas display in sync whenever the wrapper changes size
+        // (dialog resize, window resize, etc.).
+        if (window.ResizeObserver) {
+            new ResizeObserver(fitCanvasDisplay).observe(canvasWrapper);
+        }
+        window.addEventListener('resize', fitCanvasDisplay);
+
         function hexToRgba(hex) {
             const clean = String(hex || '#000000').replace('#', '');
             const v = parseInt(clean.length === 3
@@ -6467,30 +6502,55 @@ document.addEventListener('DOMContentLoaded', function() {
         function onPointerMove(e) {
             if (!isDrawing) return;
             const p = pointerPos(e);
+            const shift = !!e.shiftKey;
             if (currentTool === 'brush' || currentTool === 'eraser') {
                 ctx.lineTo(p.x, p.y);
                 ctx.stroke();
             } else if (currentTool === 'line') {
                 restoreShapeSnapshot();
+                // Shift snaps the line to the nearest 45° angle from the
+                // starting point — useful for clean diagonals/horizontals.
+                let endX = p.x, endY = p.y;
+                if (shift) {
+                    const dx = p.x - startX, dy = p.y - startY;
+                    const dist = Math.hypot(dx, dy);
+                    const step = Math.PI / 4; // 45°
+                    const snapped = Math.round(Math.atan2(dy, dx) / step) * step;
+                    endX = startX + Math.cos(snapped) * dist;
+                    endY = startY + Math.sin(snapped) * dist;
+                }
                 ctx.beginPath();
                 ctx.lineWidth = currentSize;
                 ctx.strokeStyle = currentColor;
                 ctx.lineCap = 'round';
                 ctx.moveTo(startX, startY);
-                ctx.lineTo(p.x, p.y);
+                ctx.lineTo(endX, endY);
                 ctx.stroke();
             } else if (currentTool === 'rect') {
                 restoreShapeSnapshot();
+                let w = p.x - startX, h = p.y - startY;
+                if (shift) {
+                    // Constrain to a square
+                    const s = Math.min(Math.abs(w), Math.abs(h));
+                    w = (w < 0 ? -1 : 1) * s;
+                    h = (h < 0 ? -1 : 1) * s;
+                }
                 ctx.lineWidth = currentSize;
                 ctx.strokeStyle = currentColor;
-                ctx.strokeRect(startX, startY, p.x - startX, p.y - startY);
+                ctx.strokeRect(startX, startY, w, h);
             } else if (currentTool === 'circle') {
                 restoreShapeSnapshot();
+                let rx = (p.x - startX) / 2;
+                let ry = (p.y - startY) / 2;
+                if (shift) {
+                    // Constrain to a perfect circle
+                    const r = Math.min(Math.abs(rx), Math.abs(ry));
+                    rx = (rx < 0 ? -1 : 1) * r;
+                    ry = (ry < 0 ? -1 : 1) * r;
+                }
                 ctx.beginPath();
                 ctx.lineWidth = currentSize;
                 ctx.strokeStyle = currentColor;
-                const rx = (p.x - startX) / 2;
-                const ry = (p.y - startY) / 2;
                 ctx.ellipse(startX + rx, startY + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
                 ctx.stroke();
             }
@@ -6551,8 +6611,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (autoDrawCheckbox) autoDrawCheckbox.checked = false;
             if (autoDrawLabel) autoDrawLabel.classList.remove('active');
             drawingDialog.style.display = 'flex';
-            // Sync the brush preview to the new canvas dimensions
+            // Sync the brush preview and canvas display now that the wrapper
+            // has a real size (display:flex was just applied).
             updateBrushCursorSize();
+            requestAnimationFrame(fitCanvasDisplay);
         }
 
         function closeDrawingDialog() {
@@ -6777,6 +6839,15 @@ document.addEventListener('DOMContentLoaded', function() {
         function onDrawingKeyDown(e) {
             if (drawingDialog.style.display !== 'flex') return;
             if (isTextInput(e.target)) return;
+
+            // Ctrl/Cmd + Z → undo (popHistory). Shift+Ctrl+Z would be redo
+            // but we don't have a redo stack, so we just swallow it.
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                if (!e.shiftKey) popHistory();
+                return;
+            }
+
             if (e.code === 'Space') {
                 e.preventDefault();
                 if (!e.repeat && autoDrawCheckbox) {

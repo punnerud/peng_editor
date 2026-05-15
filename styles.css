@@ -1643,15 +1643,30 @@ body {
     min-width: 380px;
     max-width: 98vw;
     width: auto;
-    /* Extra padding on the right/bottom so the edge resize bands sit
-       outside the content area instead of overlapping buttons. */
     padding: 16px 24px 24px 18px;
-    overflow-x: hidden;
-    overflow-y: auto;
+    /* Flex column lets the canvas wrapper take the leftover space while the
+       toolbar and action buttons keep their natural height. Bottom resize
+       handle (position:absolute bottom:0) then always sits below the
+       actions because the column is a fixed-height box, not a scroll area. */
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
     min-height: 360px;
+    height: auto;
     max-height: 95vh;
     position: relative;
     box-sizing: border-box;
+}
+
+.drawing-dialog-content .drawing-toolbar,
+.drawing-dialog-content .drawing-actions {
+    flex: 0 0 auto;
+}
+
+.drawing-dialog-content .drawing-canvas-wrapper {
+    flex: 1 1 auto;
+    min-height: 100px;
 }
 
 .drawing-toolbar {
@@ -1759,9 +1774,12 @@ body {
     background-color: #fff;
     width: 100%;
     max-width: 100%;
-    max-height: 65vh;
-    overflow: auto;
-    display: block;
+    /* No scrollbars — fitCanvasDisplay in JS sizes the canvas via CSS to
+       always fit inside this wrapper while preserving aspect ratio. */
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     box-sizing: border-box;
     background-image:
         linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
@@ -1777,6 +1795,11 @@ body {
     cursor: crosshair;
     touch-action: none;
     background-color: #fff;
+    /* Display size is set by fitCanvasDisplay() so the canvas always fits
+       in the wrapper. Pixel size (canvas.width/height attributes) is
+       independent of the displayed size. */
+    max-width: 100%;
+    max-height: 100%;
 }
 
 /* Brush/eraser preview cursor — follows the mouse, sized like the stroke */
