@@ -113,7 +113,11 @@ body {
 
 #editor {
     min-height: 400px;
-    padding: 20px;
+    /* Side padding matches what .editor-with-line-numbers needs, so the
+       content area stays the same width whether line numbers are showing
+       or not — only the gutter visuals (.line-numbers, ::after stripe)
+       come and go. */
+    padding: 20px 40px;
     outline: none;
     overflow-y: auto;
     background-color: #fff;
@@ -157,7 +161,10 @@ body {
 #html-source {
     min-height: 400px;
     width: 100%;
-    padding: 20px;
+    /* Mirror #editor: 40 px on the sides keeps line-numbers-on / -off look
+       identical and avoids width jitter when toggling the source view. */
+    padding: 20px 40px;
+    box-sizing: border-box;
     font-family: 'Courier New', monospace;
     font-size: 14px;
     resize: vertical;
