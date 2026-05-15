@@ -4700,8 +4700,11 @@ document.addEventListener('DOMContentLoaded', function() {
             existingLineNumbers.remove();
         }
         
-        // Toggle editor class
-        editor.classList.toggle('editor-with-line-numbers', show);
+        // Keep the editor-with-line-numbers class on permanently so the
+        // layout (padding, bg gutter, ::after stripe) doesn't shift when
+        // the setting is toggled off. The .line-numbers container itself
+        // is what's actually added/removed below.
+        editor.classList.add('editor-with-line-numbers');
         
         if (show) {
             // Create line numbers container
