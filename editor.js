@@ -641,12 +641,15 @@ document.addEventListener('DOMContentLoaded', function() {
         emojiBtn.addEventListener('click', showEmojiDialog);
         
         // Add event listeners to color pickers.
-        // The pickers now live inside the combined colors dialog, so we must
-        // restore the editor selection before applying — otherwise the dialog
-        // stole focus and execCommand would no-op (or apply to the wrong spot).
+        // The pickers live inside the combined colors dialog. We restore the
+        // editor selection before applying, then re-capture afterwards so
+        // the next "input" event in the same drag still targets the same
+        // (now-mutated) text — that's what makes the colour live-update on
+        // the highlighted text as the user drags the picker.
         forecolorPicker.addEventListener('input', function() {
             restoreColorSelection();
             execCommand('foreColor', false, this.value);
+            captureColorSelection();
         });
 
         forecolorPicker.addEventListener('click', function() {
@@ -656,6 +659,7 @@ document.addEventListener('DOMContentLoaded', function() {
         backcolorPicker.addEventListener('input', function() {
             restoreColorSelection();
             execCommand('hiliteColor', false, this.value);
+            captureColorSelection();
         });
 
         backcolorPicker.addEventListener('click', function() {
@@ -6072,6 +6076,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // After applying a colour the DOM mutates (the text gets wrapped in a
+    // span), which can invalidate the cached range. Refresh savedColorRange
+    // from the current selection so the next drag of the picker still
+    // affects the same text.
+    function captureColorSelection() {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0
+            && editor.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+            savedColorRange = sel.getRangeAt(0).cloneRange();
+        }
+    }
+
     (function initColorsDialog() {
         const colorsBtn = document.getElementById('colors-btn');
         const colorsDialog = document.getElementById('colors-dialog');
@@ -6117,6 +6133,7 @@ document.addEventListener('DOMContentLoaded', function() {
             forecolorPicker.value = hex;
             restoreColorSelection();
             execCommand('foreColor', false, hex);
+            captureColorSelection();
             syncColorPreview();
         }
 
@@ -6124,6 +6141,7 @@ document.addEventListener('DOMContentLoaded', function() {
             backcolorPicker.value = hex;
             restoreColorSelection();
             execCommand('hiliteColor', false, hex);
+            captureColorSelection();
             syncColorPreview();
         }
 
@@ -6191,6 +6209,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function closeColorsDialog() {
             colorsDialog.style.display = 'none';
+            // Put the user back where they were: the same text still
+            // highlighted, the editor focused, ready to keep typing.
+            try {
+                editor.focus();
+                restoreColorSelection();
+            } catch (err) {}
         }
 
         colorsBtn.addEventListener('click', openColorsDialog);
