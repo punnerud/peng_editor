@@ -5951,12 +5951,49 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (direction === 'up') {
             const prev = firstBlock.previousElementSibling;
-            if (!prev) return; // already at the top
-            parent.insertBefore(prev, lastBlock.nextSibling);
+            if (prev) {
+                // Swap with the previous sibling at the same nesting level.
+                parent.insertBefore(prev, lastBlock.nextSibling);
+            } else if (parent !== editor && parent.parentNode) {
+                // No prior sibling — "escape" the parent container so the
+                // user can keep moving past wrappers, image-figures etc.
+                // until they reach the top of the document.
+                const block = lastBlock; // moving up: detach in order first..last
+                const grand = parent.parentNode;
+                const movingBlocks = [];
+                let cur = firstBlock;
+                while (cur) {
+                    movingBlocks.push(cur);
+                    if (cur === lastBlock) break;
+                    cur = cur.nextElementSibling;
+                }
+                movingBlocks.reverse().forEach(b => grand.insertBefore(b, parent));
+                // Re-fetch first/last in their new sibling order
+                firstBlock = movingBlocks[movingBlocks.length - 1];
+                lastBlock = movingBlocks[0];
+            } else {
+                return; // already at the document top
+            }
         } else if (direction === 'down') {
             const next = lastBlock.nextElementSibling;
-            if (!next) return; // already at the bottom
-            parent.insertBefore(next, firstBlock);
+            if (next) {
+                parent.insertBefore(next, firstBlock);
+            } else if (parent !== editor && parent.parentNode) {
+                const grand = parent.parentNode;
+                const movingBlocks = [];
+                let cur = firstBlock;
+                while (cur) {
+                    movingBlocks.push(cur);
+                    if (cur === lastBlock) break;
+                    cur = cur.nextElementSibling;
+                }
+                const after = parent.nextSibling;
+                movingBlocks.forEach(b => grand.insertBefore(b, after));
+                firstBlock = movingBlocks[0];
+                lastBlock = movingBlocks[movingBlocks.length - 1];
+            } else {
+                return;
+            }
         } else {
             return;
         }
@@ -6127,6 +6164,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         forecolorPicker.addEventListener('input', syncColorPreview);
         backcolorPicker.addEventListener('input', syncColorPreview);
+
+        // Clicking the "A" icon or the bg square should also open the
+        // matching picker — bigger hit target than the small color input.
+        if (cellFore) cellFore.addEventListener('click', () => forecolorPicker.click());
+        if (cellBack) cellBack.addEventListener('click', () => backcolorPicker.click());
 
         // Remember the colour the user committed to (on change, not every
         // pixel of drag) — that's the value that ends up applied to text.
@@ -6414,7 +6456,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function updateUndoRedoButtons() {
             if (undoBtnDraw) undoBtnDraw.disabled = drawingHistory.length === 0;
-            if (redoBtnDraw) redoBtnDraw.disabled = redoStack.length === 0;
+            // Hide the redo button entirely when there's nothing to redo —
+            // it only makes sense after an undo and disappears as soon as
+            // the user does anything else.
+            if (redoBtnDraw) redoBtnDraw.style.display = redoStack.length === 0 ? 'none' : '';
         }
 
         function pushHistory() {
