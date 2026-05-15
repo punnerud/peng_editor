@@ -5906,10 +5906,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Find the nearest ancestor block element. Going to nearest (rather than
         // strictly direct child of editor) lets us move list items inside their
-        // list, paragraphs inside a wrapping div, etc. — which is what the user
-        // expects when arrowing through line breaks across structures.
+        // list, paragraphs inside a wrapping div, etc.
         const BLOCK_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-            'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'SECTION', 'ARTICLE']);
+            'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'SECTION', 'ARTICLE',
+            'FIGURE', 'IMG']);
         function nearestBlock(node) {
             let n = (node && node.nodeType === Node.TEXT_NODE) ? node.parentNode : node;
             while (n && n !== editor) {
@@ -5919,8 +5919,24 @@ document.addEventListener('DOMContentLoaded', function() {
             return null;
         }
 
-        let firstBlock = nearestBlock(range.startContainer);
-        let lastBlock = nearestBlock(range.endContainer);
+        // After selectNode(element), range.startContainer is the parent and
+        // range.startOffset is the index of the selected child. If that
+        // parent is the editor itself, nearestBlock walks straight past the
+        // child we actually selected. This helper drops into the child first
+        // so an image (or its wrapper) gets picked up as the block to move.
+        function blockFromRangePoint(container, offset) {
+            let n = container;
+            if (n && n.nodeType === Node.ELEMENT_NODE && n.childNodes[offset]) {
+                n = n.childNodes[offset];
+            }
+            return nearestBlock(n);
+        }
+
+        let firstBlock = blockFromRangePoint(range.startContainer, range.startOffset);
+        let lastBlock = blockFromRangePoint(range.endContainer,
+            Math.max(0, range.endOffset - (range.collapsed ? 0 : 1)));
+        if (!firstBlock) firstBlock = nearestBlock(range.startContainer);
+        if (!lastBlock) lastBlock = nearestBlock(range.endContainer);
         if (!firstBlock) return;
         if (!lastBlock) lastBlock = firstBlock;
 
@@ -6394,15 +6410,20 @@ document.addEventListener('DOMContentLoaded', function() {
             activeImg = null;
         }
 
-        // Click on an image inside the editor shows the panel
-        editor.addEventListener('click', function (e) {
+        // Click or touch on an image inside the editor shows the panel.
+        // We listen on both: the touchstart handler elsewhere preventDefaults
+        // to stop zoom/scroll, which can also suppress the synthetic click
+        // on mobile — so a separate touchend hook is needed.
+        function onEditorTap(e) {
             const img = e.target.closest('img');
             if (img) {
                 show(img);
-            } else {
+            } else if (!panel.contains(e.target)) {
                 hide();
             }
-        });
+        }
+        editor.addEventListener('click', onEditorTap);
+        editor.addEventListener('touchend', onEditorTap);
 
         // Click anywhere outside the editor and outside the panel hides it
         document.addEventListener('mousedown', function (e) {
