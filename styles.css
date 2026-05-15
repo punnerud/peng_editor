@@ -1407,6 +1407,136 @@ body {
     }
 }
 
+/* ===== Image action panel (under selected image) ===== */
+#img-action-panel {
+    display: none;
+    position: absolute;
+    z-index: 900;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    padding: 4px;
+    gap: 4px;
+    align-items: center;
+}
+
+#img-action-panel.visible {
+    display: inline-flex;
+}
+
+#img-action-panel button {
+    background-color: #f4f4f4;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: normal;
+    cursor: pointer;
+    margin: 0;
+}
+
+#img-action-panel button:hover {
+    background-color: #e0e0e0;
+}
+
+#img-action-panel button.danger:hover {
+    background-color: #ffe0e0;
+    border-color: #d33;
+    color: #c00;
+}
+
+/* ===== Combined color dialog ===== */
+.colors-dialog-content {
+    min-width: 360px;
+    max-width: 540px;
+}
+
+.color-row {
+    display: grid;
+    grid-template-columns: 80px 44px 36px 1fr;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.color-row-label {
+    font-weight: bold;
+    color: #333;
+}
+
+.color-row input[type="color"] {
+    width: 44px;
+    height: 36px;
+    padding: 2px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    background-color: #fff;
+}
+
+.color-clear {
+    width: 36px;
+    height: 36px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: linear-gradient(135deg, #fff 0%, #fff 47%, #d33 48%, #d33 52%, #fff 53%, #fff 100%) !important;
+    color: #333 !important;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.color-clear:hover {
+    border-color: #888;
+}
+
+.rainbow-palette {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 2px;
+}
+
+.rainbow-swatch {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    min-height: 18px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 2px;
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.rainbow-swatch:hover {
+    transform: scale(1.18);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    z-index: 1;
+    position: relative;
+}
+
+#colors-save-btn {
+    width: 100%;
+    margin-top: 16px;
+}
+
+@media (max-width: 500px) {
+    .colors-dialog-content {
+        min-width: 0;
+        width: 92vw;
+    }
+    .color-row {
+        grid-template-columns: 60px 40px 32px 1fr;
+        gap: 6px;
+    }
+    .rainbow-palette {
+        grid-template-columns: repeat(12, 1fr);
+    }
+}
+
 /* ===== Drawing dialog (mspaint-style) ===== */
 .drawing-dialog-content {
     min-width: 0;

@@ -610,22 +610,25 @@ document.addEventListener('DOMContentLoaded', function() {
         codeBtn.addEventListener('click', insertCodeBlock);
         emojiBtn.addEventListener('click', showEmojiDialog);
         
-        // Add event listeners to color pickers
+        // Add event listeners to color pickers.
+        // The pickers now live inside the combined colors dialog, so we must
+        // restore the editor selection before applying — otherwise the dialog
+        // stole focus and execCommand would no-op (or apply to the wrong spot).
         forecolorPicker.addEventListener('input', function() {
+            restoreColorSelection();
             execCommand('foreColor', false, this.value);
         });
-        
+
         forecolorPicker.addEventListener('click', function() {
-            // Update the picker to show current text color before the color picker opens
             updateColorPickerState();
         });
-        
+
         backcolorPicker.addEventListener('input', function() {
+            restoreColorSelection();
             execCommand('hiliteColor', false, this.value);
         });
-        
+
         backcolorPicker.addEventListener('click', function() {
-            // Update the picker to show current background color before the color picker opens
             updateColorPickerState();
         });
         
@@ -2362,6 +2365,8 @@ document.addEventListener('DOMContentLoaded', function() {
         emojiDialog.style.display = 'none';
         const drawDlg = document.getElementById('drawing-dialog');
         if (drawDlg) drawDlg.style.display = 'none';
+        const colorsDlg = document.getElementById('colors-dialog');
+        if (colorsDlg) colorsDlg.style.display = 'none';
         
         // Clear dialog inputs
         linkUrl.value = '';
@@ -5830,68 +5835,76 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Function to move selected content
+    // Move the selected block(s) up/down by swapping with the adjacent
+    // sibling block, or indent/outdent for left/right.
+    //
+    // The previous version did extractContents() + insertNode(<div>), which:
+    //   - wrapped the selection in a stray <div> (breaking HTML structure)
+    //   - failed when elementFromPoint returned a node outside the editor,
+    //     leaving the content "lost" visually
+    // Hence the user's report: the marked text disappeared when arrows were
+    // pressed. Block-level swap is both safer and matches user expectations.
     function moveSelection(direction) {
         const selection = window.getSelection();
-        if (!selection.rangeCount) return;
+        if (!selection || !selection.rangeCount) return;
 
         const range = selection.getRangeAt(0);
         if (!editor.contains(range.commonAncestorContainer)) return;
 
-        // Get the selected content
-        const selectedContent = range.extractContents();
-        const tempDiv = document.createElement('div');
-        tempDiv.appendChild(selectedContent);
-
-        // Get current position
-        const rects = range.getClientRects();
-        if (!rects.length) return;
-        const currentRect = rects[0];
-
-        // Calculate new position
-        let x = currentRect.left;
-        let y = currentRect.top;
-        const step = direction === 'up' || direction === 'down' ? currentRect.height : 10;
-
-        switch (direction) {
-            case 'left': x -= step; break;
-            case 'right': x += step; break;
-            case 'up': y -= step; break;
-            case 'down': y += step; break;
+        // Left/right → existing indent/outdent semantics
+        if (direction === 'left') {
+            document.execCommand('outdent');
+            return;
         }
-
-        // Find element at new position
-        const target = document.elementFromPoint(x, y);
-        if (!target || !editor.contains(target)) {
-            // If no valid target, put content back at original position
-            range.insertNode(tempDiv);
+        if (direction === 'right') {
+            document.execCommand('indent');
             return;
         }
 
-        // Create new range at target position
-        const newRange = document.createRange();
-        if (target.nodeType === Node.TEXT_NODE) {
-            newRange.setStart(target, 0);
-        } else {
-            const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null, false);
-            const textNode = walker.firstChild();
-            if (textNode) {
-                newRange.setStart(textNode, 0);
-            } else {
-                newRange.setStart(target, 0);
+        // Up/down → swap the containing top-level block with its sibling.
+        function topBlockOf(node) {
+            let n = (node && node.nodeType === Node.TEXT_NODE) ? node.parentNode : node;
+            while (n && n.parentNode && n.parentNode !== editor) {
+                n = n.parentNode;
+            }
+            return (n && n.parentNode === editor) ? n : null;
+        }
+
+        let firstBlock = topBlockOf(range.startContainer);
+        let lastBlock = topBlockOf(range.endContainer);
+        if (!firstBlock) return;
+        if (!lastBlock) lastBlock = firstBlock;
+
+        // Ensure firstBlock precedes lastBlock in DOM order
+        if (firstBlock !== lastBlock) {
+            const order = firstBlock.compareDocumentPosition(lastBlock);
+            if (order & Node.DOCUMENT_POSITION_PRECEDING) {
+                const tmp = firstBlock;
+                firstBlock = lastBlock;
+                lastBlock = tmp;
             }
         }
-        newRange.collapse(true);
 
-        // Insert content at new position
-        newRange.insertNode(tempDiv);
+        if (direction === 'up') {
+            const prev = firstBlock.previousElementSibling;
+            if (!prev) return; // already at the top
+            editor.insertBefore(prev, lastBlock.nextSibling);
+        } else if (direction === 'down') {
+            const next = lastBlock.nextElementSibling;
+            if (!next) return; // already at the bottom
+            editor.insertBefore(next, firstBlock);
+        } else {
+            return;
+        }
 
-        // Select the moved content
-        newRange.selectNode(tempDiv.firstChild);
+        // Re-select the moved blocks so the user can keep moving them
+        const newRange = document.createRange();
+        newRange.setStartBefore(firstBlock);
+        newRange.setEndAfter(lastBlock);
         selection.removeAllRanges();
         selection.addRange(newRange);
 
-        // Save the change to history
-        saveHistory();
+        try { saveHistory(); } catch (err) {}
     }
 
     // Function to update movement buttons visibility
@@ -5938,6 +5951,210 @@ document.addEventListener('DOMContentLoaded', function() {
             makeWrapperDraggable(wrapper);
         });
     }
+
+    // ===== Combined color dialog (fore + back + rainbow) =====
+    // Module-level so input handlers wired up in setupEventListeners can call it.
+    var savedColorRange = null;
+
+    function restoreColorSelection() {
+        if (!savedColorRange) return;
+        try {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(savedColorRange);
+        } catch (err) {
+            console.warn('restoreColorSelection failed:', err);
+        }
+    }
+
+    (function initColorsDialog() {
+        const colorsBtn = document.getElementById('colors-btn');
+        const colorsDialog = document.getElementById('colors-dialog');
+        if (!colorsBtn || !colorsDialog) return;
+
+        const saveBtnC = document.getElementById('colors-save-btn');
+        const closeBtnC = colorsDialog.querySelector('.close-dialog');
+        const forePalette = colorsDialog.querySelector('.rainbow-palette[data-target="fore"]');
+        const backPalette = colorsDialog.querySelector('.rainbow-palette[data-target="back"]');
+        const clearButtons = colorsDialog.querySelectorAll('.color-clear');
+
+        // Rainbow palette swatches — covers a full rainbow plus grayscale row.
+        const palette = [
+            '#000000', '#444444', '#888888', '#bbbbbb', '#dddddd', '#ffffff',
+            '#ff0000', '#ff5500', '#ff8800', '#ffaa00', '#ffdd00', '#ffff00',
+            '#bbff00', '#66cc00', '#00aa00', '#00cc88', '#00bbbb', '#0088ff',
+            '#0044cc', '#5500cc', '#8800cc', '#cc00cc', '#ff66cc', '#aa3300',
+        ];
+
+        function buildPalette(container, onPick) {
+            palette.forEach(hex => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'rainbow-swatch';
+                btn.style.backgroundColor = hex;
+                btn.title = hex;
+                btn.addEventListener('click', () => onPick(hex));
+                container.appendChild(btn);
+            });
+        }
+
+        if (forePalette) buildPalette(forePalette, (hex) => {
+            forecolorPicker.value = hex;
+            restoreColorSelection();
+            execCommand('foreColor', false, hex);
+        });
+        if (backPalette) buildPalette(backPalette, (hex) => {
+            backcolorPicker.value = hex;
+            restoreColorSelection();
+            execCommand('hiliteColor', false, hex);
+        });
+
+        clearButtons.forEach(b => b.addEventListener('click', function () {
+            restoreColorSelection();
+            if (b.dataset.target === 'fore') {
+                execCommand('foreColor', false, '#000000');
+                forecolorPicker.value = '#000000';
+            } else {
+                execCommand('hiliteColor', false, 'transparent');
+                backcolorPicker.value = '#ffffff';
+            }
+        }));
+
+        function openColorsDialog() {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0
+                && editor.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+                savedColorRange = sel.getRangeAt(0).cloneRange();
+            } else {
+                savedColorRange = null;
+            }
+            try { updateColorPickerState(); } catch (err) {}
+            colorsDialog.style.display = 'flex';
+        }
+
+        function closeColorsDialog() {
+            colorsDialog.style.display = 'none';
+        }
+
+        colorsBtn.addEventListener('click', openColorsDialog);
+        saveBtnC.addEventListener('click', closeColorsDialog);
+        if (closeBtnC) closeBtnC.addEventListener('click', closeColorsDialog);
+
+        // Close when the backdrop (outside dialog-content) is clicked.
+        colorsDialog.addEventListener('click', function (e) {
+            if (e.target === colorsDialog) closeColorsDialog();
+        });
+    })();
+
+    // ===== Image action panel (buttons under selected image) =====
+    (function initImageActionPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'img-action-panel';
+        panel.innerHTML = `
+            <button type="button" data-action="edit" title="Rediger"><i class="fas fa-edit"></i> <span class="ia-label">Rediger</span></button>
+            <button type="button" data-action="size" title="Endre størrelse"><i class="fas fa-arrows-alt"></i></button>
+            <button type="button" data-action="delete" class="danger" title="Slett"><i class="fas fa-trash"></i></button>
+        `;
+        document.body.appendChild(panel);
+
+        const editBtn = panel.querySelector('[data-action="edit"]');
+        const sizeBtn = panel.querySelector('[data-action="size"]');
+        const deleteBtn = panel.querySelector('[data-action="delete"]');
+        const editLabel = panel.querySelector('.ia-label');
+
+        let activeImg = null;
+
+        function isDrawing(img) {
+            return !!img && (img.classList.contains('peng-drawing')
+                || img.getAttribute('data-peng-drawing') === 'true');
+        }
+
+        function positionPanel(img) {
+            const rect = img.getBoundingClientRect();
+            const sx = window.pageXOffset || document.documentElement.scrollLeft;
+            const sy = window.pageYOffset || document.documentElement.scrollTop;
+            panel.style.left = (rect.left + sx) + 'px';
+            panel.style.top = (rect.bottom + sy + 6) + 'px';
+        }
+
+        function show(img) {
+            activeImg = img;
+            editLabel.textContent = isDrawing(img) ? 'Rediger tegning' : 'Rediger bilde';
+            panel.classList.add('visible');
+            positionPanel(img);
+        }
+
+        function hide() {
+            panel.classList.remove('visible');
+            activeImg = null;
+        }
+
+        // Click on an image inside the editor shows the panel
+        editor.addEventListener('click', function (e) {
+            const img = e.target.closest('img');
+            if (img) {
+                show(img);
+            } else {
+                hide();
+            }
+        });
+
+        // Click anywhere outside the editor and outside the panel hides it
+        document.addEventListener('mousedown', function (e) {
+            if (!panel.contains(e.target) && !editor.contains(e.target)) {
+                hide();
+            }
+        });
+
+        // Keep panel pinned while scrolling/resizing the page
+        window.addEventListener('scroll', () => { if (activeImg) positionPanel(activeImg); }, true);
+        window.addEventListener('resize', () => { if (activeImg) positionPanel(activeImg); });
+
+        editBtn.addEventListener('click', function () {
+            if (!activeImg) return;
+            if (isDrawing(activeImg)) {
+                // Reuse the existing double-click flow from the drawing module
+                activeImg.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+            } else {
+                // Edit a regular image: prompt for new src/alt
+                const newSrc = prompt('Bilde-URL:', activeImg.getAttribute('src') || '');
+                if (newSrc !== null) {
+                    activeImg.setAttribute('src', newSrc);
+                }
+                const newAlt = prompt('Alt-tekst:', activeImg.getAttribute('alt') || '');
+                if (newAlt !== null) {
+                    activeImg.setAttribute('alt', newAlt);
+                }
+                try { saveHistory(); } catch (err) {}
+            }
+            hide();
+        });
+
+        sizeBtn.addEventListener('click', function () {
+            if (!activeImg) return;
+            const curW = activeImg.getAttribute('width') || activeImg.width || '';
+            const newW = prompt('Bredde (px):', curW);
+            if (newW !== null && newW.trim() !== '') {
+                activeImg.setAttribute('width', String(parseInt(newW, 10) || curW));
+                activeImg.removeAttribute('height'); // keep aspect ratio
+            }
+            try { saveHistory(); } catch (err) {}
+            if (activeImg) positionPanel(activeImg);
+        });
+
+        deleteBtn.addEventListener('click', function () {
+            if (!activeImg) return;
+            const parent = activeImg.parentNode;
+            if (parent) {
+                // If the image is wrapped in a .image-wrapper, remove the wrapper too
+                const wrapper = activeImg.closest('.image-wrapper');
+                (wrapper || activeImg).remove();
+            }
+            try { saveHistory(); } catch (err) {}
+            try { updateWordCount(); } catch (err) {}
+            hide();
+        });
+    })();
 
     // ===== Drawing module (mspaint-style canvas drawing) =====
     (function initDrawingModule() {
