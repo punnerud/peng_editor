@@ -292,7 +292,9 @@
                     </label>
                 </div>
                 <button type="button" id="colors-save-btn">Lagre</button>
-                <div class="dialog-resize-corner" title="Dra for å endre dialog-størrelse"></div>
+                <div class="dialog-resize-edge dialog-resize-right" data-edge="right" title="Dra for å gjøre bredere"></div>
+                <div class="dialog-resize-edge dialog-resize-bottom" data-edge="bottom" title="Dra for å gjøre høyere"></div>
+                <div class="dialog-resize-corner" data-edge="corner" title="Dra for å endre dialog-størrelse"></div>
             </div>
         </div>
 
@@ -328,15 +330,14 @@
                 <div class="drawing-canvas-wrapper" id="drawing-canvas-wrapper">
                     <canvas id="drawing-canvas" width="640" height="420"></canvas>
                     <div class="brush-cursor" id="brush-cursor"></div>
-                    <div class="canvas-resize-handle" id="canvas-resize-right" data-edge="right" title="Dra for å gjøre bredere"><i class="fas fa-arrows-alt-h"></i></div>
-                    <div class="canvas-resize-handle" id="canvas-resize-bottom" data-edge="bottom" title="Dra for å gjøre høyere"><i class="fas fa-arrows-alt-v"></i></div>
-                    <div class="canvas-resize-handle" id="canvas-resize-corner" data-edge="corner" title="Dra for å endre størrelse"><i class="fas fa-expand-arrows-alt"></i></div>
                 </div>
                 <div class="drawing-actions">
                     <button type="button" id="drawing-save-btn">Sett inn</button>
                     <button type="button" id="drawing-cancel-btn">Avbryt</button>
                 </div>
-                <div class="dialog-resize-corner" title="Dra for å endre dialog-størrelse"></div>
+                <div class="dialog-resize-edge dialog-resize-right" data-edge="right" title="Dra for å gjøre bredere"></div>
+                <div class="dialog-resize-edge dialog-resize-bottom" data-edge="bottom" title="Dra for å gjøre høyere"></div>
+                <div class="dialog-resize-corner" data-edge="corner" title="Dra for å endre dialog-størrelse"></div>
             </div>
         </div>
 

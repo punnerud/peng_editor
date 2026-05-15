@@ -6084,17 +6084,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     })();
 
-    // ===== Generic dialog resize (lower-right corner handle) =====
-    // For the drawing dialog specifically, dragging this also grows/shrinks
-    // the inner canvas by the same delta — otherwise the user would have to
-    // resize the dialog and then the canvas separately.
+    // ===== Generic dialog resize (corner + edge handles) =====
+    // Each handle's data-edge tells us which axis to resize:
+    //   "corner" → both width and height
+    //   "right"  → width only
+    //   "bottom" → height only
+    // For the drawing dialog the inner canvas resizes in lockstep, snapshotted
+    // so the artwork isn't wiped.
     (function initDialogResize() {
-        const handles = document.querySelectorAll('.dialog-resize-corner');
+        const handles = document.querySelectorAll(
+            '.dialog-resize-corner, .dialog-resize-edge'
+        );
         handles.forEach(handle => {
             const content = handle.closest('.dialog-content');
             if (!content) return;
             const dialog = handle.closest('.dialog');
             const innerCanvas = dialog ? dialog.querySelector('#drawing-canvas') : null;
+            const edge = handle.dataset.edge || 'corner';
 
             let active = false;
             let start = { x: 0, y: 0, w: 0, h: 0 };
@@ -6121,19 +6127,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!active) return;
                 e.preventDefault();
                 e.stopPropagation();
-                const dx = e.clientX - start.x;
-                const dy = e.clientY - start.y;
+                const dx = (edge === 'bottom') ? 0 : (e.clientX - start.x);
+                const dy = (edge === 'right')  ? 0 : (e.clientY - start.y);
+
                 const newW = Math.max(300, Math.min(window.innerWidth * 0.98, start.w + dx));
                 const newH = Math.max(240, Math.min(window.innerHeight * 0.95, start.h + dy));
-                content.style.width = newW + 'px';
-                content.style.height = newH + 'px';
+                if (edge !== 'bottom') content.style.width = newW + 'px';
+                if (edge !== 'right')  content.style.height = newH + 'px';
                 content.style.maxWidth = 'none';
                 content.style.maxHeight = 'none';
 
-                // Drag canvas along with the dialog
                 if (innerCanvas && canvasStart) {
-                    const newCW = Math.max(80, Math.min(4000, canvasStart.w + dx));
-                    const newCH = Math.max(80, Math.min(4000, canvasStart.h + dy));
+                    const newCW = (edge === 'bottom')
+                        ? innerCanvas.width
+                        : Math.max(80, Math.min(4000, canvasStart.w + dx));
+                    const newCH = (edge === 'right')
+                        ? innerCanvas.height
+                        : Math.max(80, Math.min(4000, canvasStart.h + dy));
                     if (newCW !== innerCanvas.width || newCH !== innerCanvas.height) {
                         innerCanvas.width = newCW;
                         innerCanvas.height = newCH;
@@ -6305,7 +6315,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const toolButtons = drawingDialog.querySelectorAll('.drawing-tool');
         const titleEl = document.getElementById('drawing-dialog-title');
         const closeBtnDraw = drawingDialog.querySelector('.close-dialog');
-        const resizeHandles = drawingDialog.querySelectorAll('.canvas-resize-handle');
         const autoDrawCheckbox = document.getElementById('drawing-autodraw-toggle');
         const autoDrawLabel = autoDrawCheckbox ? autoDrawCheckbox.closest('.drawing-lock-toggle') : null;
 
@@ -6613,82 +6622,8 @@ document.addEventListener('DOMContentLoaded', function() {
             closeDrawingDialog();
         }
 
-        // === Canvas resize via drag handles ===
-        // Bug fix: previously this listened on document and let pointerup
-        // bubble freely. When the user released the mouse outside the canvas
-        // wrapper, the up-event could land on the dialog backdrop and a
-        // synthesized click would close the dialog. We now use
-        // setPointerCapture on the handle itself so every move/up goes to the
-        // handle and stops propagating.
-        let isResizing = false;
-        let resizeEdge = null;
-        let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
-        let resizeOffscreen = null;
-        let resizeActiveHandle = null;
-
-        function applyResize(newW, newH) {
-            newW = Math.max(80, Math.min(4000, Math.round(newW)));
-            newH = Math.max(80, Math.min(4000, Math.round(newH)));
-            if (newW === canvas.width && newH === canvas.height) return;
-            canvas.width = newW;
-            canvas.height = newH;
-            clearCanvas();
-            if (resizeOffscreen) ctx.drawImage(resizeOffscreen, 0, 0);
-        }
-
-        function onResizeMove(e) {
-            if (!isResizing) return;
-            e.preventDefault();
-            e.stopPropagation();
-            let newW = resizeStart.w;
-            let newH = resizeStart.h;
-            const dx = e.clientX - resizeStart.x;
-            const dy = e.clientY - resizeStart.y;
-            if (resizeEdge === 'right' || resizeEdge === 'corner') newW = resizeStart.w + dx;
-            if (resizeEdge === 'bottom' || resizeEdge === 'corner') newH = resizeStart.h + dy;
-            applyResize(newW, newH);
-        }
-
-        function endResize(e) {
-            if (!isResizing) return;
-            e.preventDefault();
-            e.stopPropagation();
-            isResizing = false;
-            resizeEdge = null;
-            resizeOffscreen = null;
-            isDirty = true;
-            // Swallow follow-up click events for ~400ms. setPointerCapture
-            // alone doesn't always stop a click from firing on whatever
-            // element the cursor happens to be over at release time (e.g.
-            // the dialog backdrop), so we use a global blocker.
-            if (typeof blockNextClicks === 'function') blockNextClicks(400);
-            if (resizeActiveHandle && e.pointerId !== undefined) {
-                try { resizeActiveHandle.releasePointerCapture(e.pointerId); } catch (err) {}
-            }
-            resizeActiveHandle = null;
-        }
-
-        resizeHandles.forEach(h => {
-            h.addEventListener('pointerdown', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                isResizing = true;
-                resizeEdge = h.dataset.edge;
-                resizeStart = { x: e.clientX, y: e.clientY, w: canvas.width, h: canvas.height };
-                // Snapshot current pixels so resize doesn't wipe the drawing
-                resizeOffscreen = document.createElement('canvas');
-                resizeOffscreen.width = canvas.width;
-                resizeOffscreen.height = canvas.height;
-                resizeOffscreen.getContext('2d').drawImage(canvas, 0, 0);
-                resizeActiveHandle = h;
-                try { h.setPointerCapture(e.pointerId); } catch (err) {}
-            });
-            h.addEventListener('pointermove', onResizeMove);
-            h.addEventListener('pointerup', endResize);
-            h.addEventListener('pointercancel', endResize);
-            // Also block click events from bubbling
-            h.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); });
-        });
+        // (Canvas-specific resize handles were removed — the dialog's edge
+        // handles below resize the canvas along with the dialog.)
 
         // === Brush/eraser preview cursor ===
         function updateBrushCursorSize() {

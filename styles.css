@@ -1422,9 +1422,38 @@ body {
     }
 }
 
-/* Explicit dialog resize handle — lives at the outer bottom-right corner of
-   any .dialog-content so the user can drag to grow/shrink the dialog itself.
-   Standalone from the in-canvas resize handles, which are a separate concern. */
+/* Edge resize handles — narrow bands along the right and bottom edges of the
+   dialog. Combined with the corner handle they let you drag the dialog (and
+   the canvas inside the drawing dialog) from any outer side. */
+.dialog-resize-edge {
+    position: absolute;
+    background-color: rgba(45, 170, 219, 0.45);
+    z-index: 11;
+    touch-action: none;
+    transition: background-color 0.12s;
+}
+
+.dialog-resize-edge:hover {
+    background-color: rgba(45, 170, 219, 0.85);
+}
+
+.dialog-resize-right {
+    right: 0;
+    top: 0;
+    bottom: 22px; /* leave room for corner */
+    width: 6px;
+    cursor: ew-resize;
+}
+
+.dialog-resize-bottom {
+    bottom: 0;
+    left: 0;
+    right: 22px; /* leave room for corner */
+    height: 6px;
+    cursor: ns-resize;
+}
+
+/* Explicit dialog corner handle — bottom-right, drags both directions. */
 .dialog-resize-corner {
     position: absolute;
     right: 0;
@@ -1756,55 +1785,8 @@ body {
     display: block;
 }
 
-/* Resize handles for the canvas */
-.canvas-resize-handle {
-    position: absolute;
-    background-color: #2daadb;
-    color: #fff;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 6;
-    opacity: 0.85;
-    user-select: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
-
-.canvas-resize-handle:hover {
-    opacity: 1;
-}
-
-#canvas-resize-right {
-    right: -10px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 22px;
-    height: 36px;
-    cursor: ew-resize;
-}
-
-#canvas-resize-bottom {
-    bottom: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 36px;
-    height: 22px;
-    cursor: ns-resize;
-}
-
-#canvas-resize-corner {
-    right: -10px;
-    bottom: -10px;
-    width: 24px;
-    height: 24px;
-    cursor: nwse-resize;
-}
-
-.canvas-resize-handle i {
-    font-size: 11px;
-    pointer-events: none;
-}
+/* (Canvas resize handles removed — the dialog edge/corner handles drag
+   the canvas along with the dialog, so a separate set isn't needed.) */
 
 .drawing-actions {
     display: flex;
