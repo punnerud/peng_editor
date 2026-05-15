@@ -6084,6 +6084,69 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     })();
 
+    // ===== Generic dialog resize (lower-right corner handle) =====
+    (function initDialogResize() {
+        const handles = document.querySelectorAll('.dialog-resize-corner');
+        handles.forEach(handle => {
+            const content = handle.closest('.dialog-content');
+            if (!content) return;
+
+            let active = false;
+            let start = { x: 0, y: 0, w: 0, h: 0 };
+
+            handle.addEventListener('pointerdown', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const rect = content.getBoundingClientRect();
+                active = true;
+                start = { x: e.clientX, y: e.clientY, w: rect.width, h: rect.height };
+                try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+
+            handle.addEventListener('pointermove', function (e) {
+                if (!active) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const newW = Math.max(300, Math.min(window.innerWidth * 0.98,
+                    start.w + (e.clientX - start.x)));
+                const newH = Math.max(240, Math.min(window.innerHeight * 0.95,
+                    start.h + (e.clientY - start.y)));
+                content.style.width = newW + 'px';
+                content.style.height = newH + 'px';
+                content.style.maxWidth = 'none';
+                content.style.maxHeight = 'none';
+            });
+
+            function endDialogResize(e) {
+                if (!active) return;
+                e.preventDefault();
+                e.stopPropagation();
+                active = false;
+                try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+                // Swallow the trailing click so it can't trigger any
+                // outside-click handler.
+                blockNextClicks(400);
+            }
+            handle.addEventListener('pointerup', endDialogResize);
+            handle.addEventListener('pointercancel', endDialogResize);
+            handle.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); });
+        });
+    })();
+
+    // Used by canvas resize and dialog resize: temporarily eat any click
+    // events that bubble after a drag, so a stray mouseup on the backdrop
+    // can't close anything.
+    var clickBlockUntil = 0;
+    function blockNextClicks(ms) {
+        clickBlockUntil = Date.now() + (ms || 300);
+    }
+    document.addEventListener('click', function (e) {
+        if (Date.now() < clickBlockUntil) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+    }, true);
+
     // ===== Image action panel (buttons under selected image) =====
     (function initImageActionPanel() {
         const panel = document.createElement('div');
@@ -6566,15 +6629,11 @@ document.addEventListener('DOMContentLoaded', function() {
             resizeEdge = null;
             resizeOffscreen = null;
             isDirty = true;
-            // Swallow the immediately-following click so it can't trigger any
-            // outside-of-dialog handler (e.g. accidentally closing the dialog).
-            const swallowClick = (ev) => {
-                ev.stopPropagation();
-                ev.preventDefault();
-                document.removeEventListener('click', swallowClick, true);
-            };
-            document.addEventListener('click', swallowClick, true);
-            setTimeout(() => document.removeEventListener('click', swallowClick, true), 50);
+            // Swallow follow-up click events for ~400ms. setPointerCapture
+            // alone doesn't always stop a click from firing on whatever
+            // element the cursor happens to be over at release time (e.g.
+            // the dialog backdrop), so we use a global blocker.
+            if (typeof blockNextClicks === 'function') blockNextClicks(400);
             if (resizeActiveHandle && e.pointerId !== undefined) {
                 try { resizeActiveHandle.releasePointerCapture(e.pointerId); } catch (err) {}
             }
